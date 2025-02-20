@@ -19,7 +19,7 @@ def place_algorithm_4(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
         current_coord = (cos(current_angle), 
                         sin(current_angle))
         current_angle += 2 * asin(current_radius)
-        # current_angle = min(current_angle, 2 * Decimal(str(math.pi)))
+        # current_angle = min(current_angle + 2 * asin(current_radius), 2 * pi())
 
         next_coord = (cos(current_angle), 
                      sin(current_angle))
@@ -117,7 +117,7 @@ def get_intersections(circle1: Circle, circle2: Circle):
     
     return ((x3, y3), (x4, y4))
 
-def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k, final_optimization: bool = False) -> list[Circle]:
     """Central Plus Chords placement algorithm.
     Places a central circle and places surrounding circles."""
     circles: list[Circle] = []
@@ -137,10 +137,10 @@ def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = 
         current_coord = (cos(current_angle), sin(current_angle))
         current_angle = min(current_angle + 2 * asin(current_radius), 2 * pi())
 
-        # if current_angle >= 2 * pi():
-        #     points = get_intersections(circles[0], circles[-1])
-        #     if points:
-        #         current_coord = max(points, key=lambda p: p[0])
+        if final_optimization and current_angle >= 2 * pi():
+            points = get_intersections(circles[0], circles[-1])
+            if points:
+                current_coord = max(points, key=lambda p: p[0])
 
         next_coord = (cos(current_angle), sin(current_angle))
         
@@ -279,8 +279,8 @@ def place_algorithm_6_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 6, 6.5],
-                       help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central Plus Chords, 6: Central Plus Optimized Chords, 6.5: Central Plus Optimized Chords + Final Adjustment')
+    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 5.75, 6, 6.5],
+                       help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment')
     parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
     parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
@@ -307,6 +307,8 @@ def get_placement_algorithm(algorithm: float) -> Callable[[Decimal, Callable[[De
         return place_algorithm_5
     elif algorithm == 5.5:
         return place_algorithm_5_5
+    elif algorithm == 5.75:
+        return lambda p, pk: place_algorithm_5_5(p, pk, final_optimization=True)
     elif algorithm == 6:
         return place_algorithm_6
     elif algorithm == 6.5:

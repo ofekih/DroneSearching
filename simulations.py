@@ -283,6 +283,7 @@ def parse_args() -> argparse.Namespace:
                        help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central Plus Chords, 6: Central Plus Optimized Chords, 6.5: Central Plus Optimized Chords + Final Adjustment')
     parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
     parser.add_argument('--precision', type=int, default=10, help='Decimal precision for calculations (minimum 1)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug output')
 
     args = parser.parse_args()
     
@@ -323,9 +324,9 @@ def create_evaluator(
         return covers_unit_circle(circles), circles
     return evaluate
 
-def run_search(evaluator: Callable[[Decimal], tuple[bool, list[Circle]]]) -> tuple[Decimal, list[Circle]]:
+def run_search(evaluator: Callable[[Decimal], tuple[bool, list[Circle]]], debug: bool = False) -> tuple[Decimal, list[Circle]]:
     """Run binary search with the given evaluator."""
-    return binary_search(Decimal('0'), Decimal('1'), evaluator, debug=True)
+    return binary_search(Decimal('0'), Decimal('1'), evaluator, debug=debug)
 
 def calculate_result(p: Decimal, c_multiplier: int) -> Decimal:
     """Calculate final result using p and c_multiplier."""
@@ -334,7 +335,8 @@ def calculate_result(p: Decimal, c_multiplier: int) -> Decimal:
 def run_simulation(
     algorithm: float = 4.0,
     find_all: bool = False,
-    precision: int = 5
+    precision: int = 5,
+    debug: bool = False
 ) -> tuple[Decimal, Decimal, list[Circle], float]:
     """
     Run the circle packing simulation with the specified parameters.
@@ -343,6 +345,7 @@ def run_simulation(
         algorithm (float): Algorithm choice (4, 5, 5.5, 6, or 6.5)
         find_all (bool): Whether to use p^((k+1)/2) for radius calculation
         precision (int): Decimal precision for calculations (minimum 1)
+        debug (bool): Enable debug output
     
     Returns:
         tuple[Decimal, Decimal, list[Circle], float]: (p value, c value, list of circles, CPU time)
@@ -359,7 +362,7 @@ def run_simulation(
     evaluator = create_evaluator(place_algorithm, pk)
     
     start_time = time.process_time()
-    p, circles = run_search(evaluator)
+    p, circles = run_search(evaluator, debug=debug)
     cpu_time = time.process_time() - start_time
     
     c = calculate_result(p, c_multiplier)
@@ -372,7 +375,8 @@ def main() -> None:
     p, c, circles, cpu_time = run_simulation(
         algorithm=args.algorithm,
         find_all=args.find_all,
-        precision=args.precision
+        precision=args.precision,
+        debug=args.debug
     )
 
     # Format output with requested precision

@@ -384,11 +384,12 @@ def main() -> None:
     c_str = f"{c:.{args.precision}f}"
     print(f"p = {p_str}, c = {c_str}")
     print(f"CPU Time: {cpu_time:.3f} seconds")
-    draw_circles(circles, 
-                title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
-                p=p,
-                c=c,
-                cpu_time=cpu_time)
+    
+    draw_circles(circles,
+        title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
+        p=p,
+        c=c,
+        cpu_time=cpu_time)
 
 if __name__ == '__main__':
     main()

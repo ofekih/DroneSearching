@@ -1,7 +1,9 @@
 from decimal import Decimal, getcontext
 from functools import cache
-from typing import NamedTuple, Callable, TypeVar
+from typing import NamedTuple, Callable, TypeVar, TypedDict
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.patches import Circle as PltCircle
 
 OKABE_COLORS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=OKABE_COLORS) # type: ignore
@@ -17,47 +19,65 @@ class Square(NamedTuple):
     y: Decimal
     side_length: Decimal
 
+class CirclesPlotKwargs(TypedDict, total=False):
+    title: str | None
+    p: Decimal
+    c: Decimal
+    cpu_time: float
+
 UNIT_CIRCLE = Circle(Decimal(0), Decimal(0), Decimal(1))
 
-def draw_circles(circles: list[Circle], *,
-                title: str | None = None,
-                p: Decimal | None = None,
-                c: Decimal | None = None,
-                precision: int = 5,
-                cpu_time: float | None = None) -> None:
-    _, ax = plt.subplots()  # type: ignore
-
+def get_circles_plot(circles: list[Circle], *,
+                    title: str | None = None,
+                    p: Decimal | None = None,
+                    c: Decimal | None = None,
+                    cpu_time: float | None = None,
+                    ax: Axes | None = None):
+    """Plot circles on either a new figure or an existing axes."""
+    if ax is None:
+        fig, ax = plt.subplots(1, 1) # type: ignore
+    else:
+        fig = ax.figure
+    
     # Draw unit circle with dashed lines in black
-    ax.add_patch(plt.Circle((0, 0), 1, fill=False, linestyle='--', color='black')) # type: ignore
+    ax.add_patch(PltCircle((0, 0), 1, fill=False, linestyle='--', color='black'))
 
+    # Draw the circles
     for i, circle in enumerate(sorted(circles, key=lambda circle: circle.r, reverse=True)):
         color = OKABE_COLORS[(i + 1) % len(OKABE_COLORS)]
-        ax.add_patch(plt.Circle((circle.x, circle.y), circle.r, fill=False, color=color)) # type: ignore
-        ax.text(float(circle.x), float(circle.y), str(i + 1), # type: ignore 
-            horizontalalignment='center', verticalalignment='center', color=color,
-            fontsize=18)
+        ax.add_patch(PltCircle((float(circle.x), float(circle.y)), float(circle.r), fill=False, color=color))
+        ax.text(float(circle.x), float(circle.y), str(i + 1), # type: ignore
+                horizontalalignment='center', verticalalignment='center',
+                color=color, fontsize=18)
 
     # Add statistics if provided
     stat_text: list[str] = []
     if p is not None:
-        p_str = f"{p:.{precision}f}"
-        stat_text.append(f"$p = {p_str}$")
+        stat_text.append(f"$p = {float(p):.5f}$")
     if c is not None:
-        c_str = f"{c:.{precision}f}"
-        stat_text.append(f"$T(n) = {c_str} \\log n$")
+        stat_text.append(f"$T(n) = {float(c):.5f} \\log n$")
     if cpu_time is not None:
         stat_text.append(f"done in {cpu_time:.3f}s")
 
     if stat_text:
-        stats = ", ".join(stat_text)
-        ax.set_xlabel(stats, fontsize=10) # type: ignore
+        ax.set_xlabel(", ".join(stat_text), fontsize=10) # type: ignore
 
     if title:
-        plt.title(title, pad=20) # type: ignore
+        ax.set_title(title, pad=20) # type: ignore
 
     ax.set_aspect('equal')
     ax.set_xlim(-1.5, 1.5)
     ax.set_ylim(-1.5, 1.5)
+    
+    return fig, ax 
+
+def draw_circles(circles: list[Circle], *, 
+                title: str | None = None,
+                p: Decimal | None = None,
+                c: Decimal | None = None,
+                cpu_time: float | None = None) -> None:
+    """Draw a single set of circles."""
+    get_circles_plot(circles, title=title, p=p, c=c, cpu_time=cpu_time)
     plt.show() # type: ignore
 
 @cache

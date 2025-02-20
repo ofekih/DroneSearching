@@ -138,6 +138,7 @@ def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = 
         current_angle = min(current_angle + 2 * asin(current_radius), 2 * pi())
 
         if final_optimization and current_angle >= 2 * pi():
+            current_radius = pk(p, k - 1)
             points = get_intersections(circles[0], circles[-1])
             if points:
                 current_coord = max(points, key=lambda p: p[0])
@@ -240,11 +241,15 @@ def place_algorithm_6_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = 
         points = None
         
         if current_angle + 2 * asin(current_radius) >= 2 * pi():
+            current_radius = pk(p, k - 1)
             points = get_intersections(circles[1], circles[-1])
         
         if points:
+            remaining_angle = pi() - current_angle / 2
+            next_coord = (cos(-remaining_angle), sin(-remaining_angle))
+
             current_coord = max(points, key=lambda p: p[0])
-            new_circle_center = ((current_coord[0] + 1) / 2, current_coord[1] / 2)
+            new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
             theta = 2 * pi()
         else:
             if current_radius ** 2 < compute_x2(circles[0].r, current_radius):
@@ -258,12 +263,6 @@ def place_algorithm_6_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = 
             new_circle_center = (distance_from_center * cos(current_angle + theta), distance_from_center * sin(current_angle + theta))
 
         current_angle += 2 * theta
-
-        if current_angle >= 2 * pi():
-            points = get_intersections(circles[1], circles[-1])
-            if points:
-                current_coord = max(points, key=lambda p: p[0])
-                new_circle_center = ((current_coord[0] + 1) / 2, current_coord[1] / 2)
 
         new_circle = Circle(
             new_circle_center[0],

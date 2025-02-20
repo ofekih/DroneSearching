@@ -331,9 +331,8 @@ def calculate_result(p: Decimal, c_multiplier: int) -> Decimal:
     """Calculate final result using p and c_multiplier."""
     return c_multiplier / log2(1 / p)
 
-def main() -> None:
+def main(args: argparse.Namespace) -> None:
     """Main execution function."""
-    args = parse_args()
     
     # Set precision to double the requested precision for internal calculations
     calc_precision = (args.precision + 2) * 2
@@ -358,6 +357,4 @@ def main() -> None:
     draw_circles(circles)
 
 if __name__ == '__main__':
-    main()
-    # circles = place_algorithm_6(Decimal('0.821'))
-    # draw_circles(circles)
+    main(parse_args())

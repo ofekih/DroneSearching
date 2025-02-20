@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 
 OKABE_COLORS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=OKABE_COLORS) # type: ignore
+plt.rcParams['text.usetex'] = True
 
 class Circle(NamedTuple):
     x: Decimal
@@ -18,7 +19,12 @@ class Square(NamedTuple):
 
 UNIT_CIRCLE = Circle(Decimal(0), Decimal(0), Decimal(1))
 
-def draw_circles(circles: list[Circle]) -> None:
+def draw_circles(circles: list[Circle], *,
+                title: str | None = None,
+                p_str: str | None = None,
+                c_str: str | None = None,
+                precision: int | None = None,
+                cpu_time: float | None = None) -> None:
     _, ax = plt.subplots()  # type: ignore
 
     # Draw unit circle with dashed lines in black
@@ -30,6 +36,24 @@ def draw_circles(circles: list[Circle]) -> None:
         ax.text(float(circle.x), float(circle.y), str(i + 1), # type: ignore 
             horizontalalignment='center', verticalalignment='center', color=color,
             fontsize=18)
+
+    # Add statistics if provided
+    stat_text: list[str] = []
+    if p_str is not None:
+        stat_text.append(f"$p = {p_str}$")
+    if c_str is not None:
+        stat_text.append(f"$T(n) = {c_str} \\log n$")
+    if precision is not None:
+        stat_text.append(f"precision = {precision}") # type: ignore
+    if cpu_time is not None:
+        stat_text.append(f"done in {cpu_time:.3f}s")
+
+    if stat_text:
+        stats = ", ".join(stat_text)
+        ax.set_xlabel(stats, fontsize=10) # type: ignore
+
+    if title:
+        plt.title(title, pad=20) # type: ignore
 
     ax.set_aspect('equal')
     ax.set_xlim(-1.5, 1.5)

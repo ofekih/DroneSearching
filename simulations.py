@@ -282,7 +282,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 6, 6.5],
                        help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central Plus Chords, 6: Central Plus Optimized Chords, 6.5: Central Plus Optimized Chords + Final Adjustment')
     parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
-    parser.add_argument('--precision', type=int, default=10, help='Decimal precision for calculations (minimum 1)')
+    parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
 
     args = parser.parse_args()
@@ -384,7 +384,11 @@ def main() -> None:
     c_str = f"{c:.{args.precision}f}"
     print(f"p = {p_str}, c = {c_str}")
     print(f"CPU Time: {cpu_time:.3f} seconds")
-    draw_circles(circles)
+    draw_circles(circles, 
+                title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
+                p_str=p_str,
+                c_str=c_str,
+                cpu_time=cpu_time)
 
 if __name__ == '__main__':
     main()

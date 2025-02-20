@@ -331,23 +331,49 @@ def calculate_result(p: Decimal, c_multiplier: int) -> Decimal:
     """Calculate final result using p and c_multiplier."""
     return c_multiplier / log2(1 / p)
 
-def main(args: argparse.Namespace) -> None:
-    """Main execution function."""
+def run_simulation(
+    algorithm: float = 4.0,
+    find_all: bool = False,
+    precision: int = 5
+) -> tuple[Decimal, Decimal, list[Circle], float]:
+    """
+    Run the circle packing simulation with the specified parameters.
+    
+    Args:
+        algorithm (float): Algorithm choice (4, 5, 5.5, 6, or 6.5)
+        find_all (bool): Whether to use p^((k+1)/2) for radius calculation
+        precision (int): Decimal precision for calculations (minimum 1)
+    
+    Returns:
+        tuple[Decimal, Decimal, list[Circle], float]: (p value, c value, list of circles, CPU time)
+    """
+    if precision < 1:
+        raise ValueError('Precision must be at least 1')
     
     # Set precision to double the requested precision for internal calculations
-    calc_precision = (args.precision + 2) * 2
+    calc_precision = (precision + 2) * 2
     getcontext().prec = calc_precision
     
-    # Epsilon will now be automatically derived from precision context
-    
-    pk, c_multiplier = get_configuration(args)
-    place_algorithm = get_placement_algorithm(args.algorithm)
+    pk, c_multiplier = get_configuration(argparse.Namespace(find_all=find_all))
+    place_algorithm = get_placement_algorithm(algorithm)
     evaluator = create_evaluator(place_algorithm, pk)
     
     start_time = time.process_time()
     p, circles = run_search(evaluator)
     cpu_time = time.process_time() - start_time
+    
     c = calculate_result(p, c_multiplier)
+    return p, c, circles, cpu_time
+
+def main() -> None:
+    """Main execution function for command-line usage."""
+    args = parse_args()
+    
+    p, c, circles, cpu_time = run_simulation(
+        algorithm=args.algorithm,
+        find_all=args.find_all,
+        precision=args.precision
+    )
 
     # Format output with requested precision
     p_str = f"{p:.{args.precision}f}"
@@ -357,4 +383,4 @@ def main(args: argparse.Namespace) -> None:
     draw_circles(circles)
 
 if __name__ == '__main__':
-    main(parse_args())
+    main()

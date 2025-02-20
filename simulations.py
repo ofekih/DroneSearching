@@ -117,7 +117,7 @@ def get_intersections(circle1: Circle, circle2: Circle):
     
     return ((x3, y3), (x4, y4))
 
-def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k, final_optimization: bool = False) -> list[Circle]:
+def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k, final_optimization: bool = True) -> list[Circle]:
     """Central Plus Chords placement algorithm.
     Places a central circle and places surrounding circles."""
     circles: list[Circle] = []
@@ -174,50 +174,7 @@ def compute_x2(R: Decimal, r: Decimal):
 
     return (r - y) ** 2 + z ** 2
 
-def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
-    """Central Plus Optimized Chords placement algorithm.
-    Places a central circle and optimizes the placement of surrounding circles."""
-    circles: list[Circle] = []
-    
-    # Place central circle
-    central_radius = pk(p, Decimal(1))
-    circles.append(Circle(Decimal('0'), Decimal('0'), central_radius))
-    
-    # Place surrounding circles
-    k = Decimal(2)
-    current_angle = Decimal(0)
-    while current_angle < 2 * pi():
-        current_radius = pk(p, k)
-        if current_radius < EPSILON():
-            return [] # failure
-
-        def evaluate(b: Decimal):
-            return compute_R_T(circles[0].r, b) > current_radius, 0
-
-        if current_radius ** 2 < compute_x2(circles[0].r, current_radius):
-            b = binary_search(Decimal(0), 2 * current_radius, evaluate, debug=False)[0]
-        else:
-            b = 2 * current_radius
-        
-        theta = asin(b / 2)
-        distance_from_center = (1 - b ** 2 / 4).sqrt() - abs(current_radius ** 2 - b ** 2 / 4).sqrt()
-
-        new_circle_center = (distance_from_center * cos(current_angle + theta), distance_from_center * sin(current_angle + theta))
-
-        current_angle += 2 * theta
-
-        new_circle = Circle(
-            new_circle_center[0],
-            new_circle_center[1],
-            current_radius
-        )
-
-        circles.append(new_circle)
-        k += 1
-    
-    return circles
-
-def place_algorithm_6_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k, final_optimization: bool = True) -> list[Circle]:
     """Central Plus Optimized Chords placement algorithm.
     Places a central circle and optimizes the placement of surrounding circles."""
     circles: list[Circle] = []
@@ -240,7 +197,7 @@ def place_algorithm_6_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = 
         theta = 0
         points = None
         
-        if current_angle + 2 * asin(current_radius) >= 2 * pi():
+        if final_optimization and current_angle + 2 * asin(current_radius) >= 2 * pi():
             current_radius = pk(p, k - 1)
             points = get_intersections(circles[1], circles[-1])
         
@@ -305,13 +262,13 @@ def get_placement_algorithm(algorithm: float) -> Callable[[Decimal, Callable[[De
     elif algorithm == 5:
         return place_algorithm_5
     elif algorithm == 5.5:
-        return place_algorithm_5_5
+        return lambda p, pk: place_algorithm_5_5(p, pk, final_optimization=False)
     elif algorithm == 5.75:
-        return lambda p, pk: place_algorithm_5_5(p, pk, final_optimization=True)
+        return place_algorithm_5_5
     elif algorithm == 6:
-        return place_algorithm_6
+        return lambda p, pk: place_algorithm_6(p, pk, final_optimization=False)
     elif algorithm == 6.5:
-        return place_algorithm_6_5
+        return place_algorithm_6
     else:
         raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, or 6.")
 

@@ -21,9 +21,9 @@ UNIT_CIRCLE = Circle(Decimal(0), Decimal(0), Decimal(1))
 
 def draw_circles(circles: list[Circle], *,
                 title: str | None = None,
-                p_str: str | None = None,
-                c_str: str | None = None,
-                precision: int | None = None,
+                p: Decimal | None = None,
+                c: Decimal | None = None,
+                precision: int = 5,
                 cpu_time: float | None = None) -> None:
     _, ax = plt.subplots()  # type: ignore
 
@@ -39,12 +39,12 @@ def draw_circles(circles: list[Circle], *,
 
     # Add statistics if provided
     stat_text: list[str] = []
-    if p_str is not None:
+    if p is not None:
+        p_str = f"{p:.{precision}f}"
         stat_text.append(f"$p = {p_str}$")
-    if c_str is not None:
+    if c is not None:
+        c_str = f"{c:.{precision}f}"
         stat_text.append(f"$T(n) = {c_str} \\log n$")
-    if precision is not None:
-        stat_text.append(f"precision = {precision}") # type: ignore
     if cpu_time is not None:
         stat_text.append(f"done in {cpu_time:.3f}s")
 

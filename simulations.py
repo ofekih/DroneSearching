@@ -386,8 +386,8 @@ def main() -> None:
     print(f"CPU Time: {cpu_time:.3f} seconds")
     draw_circles(circles, 
                 title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
-                p_str=p_str,
-                c_str=c_str,
+                p=p,
+                c=c,
                 cpu_time=cpu_time)
 
 if __name__ == '__main__':

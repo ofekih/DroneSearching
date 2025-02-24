@@ -19,6 +19,9 @@ class Square(NamedTuple):
     y: Decimal
     side_length: Decimal
 
+class HorizontalLine(NamedTuple):
+    start: Decimal
+    end: Decimal
 class CirclesPlotKwargs(TypedDict, total=False):
     title: str | None
     p: Decimal
@@ -83,6 +86,57 @@ def draw_circles(circles: list[Circle], *,
 @cache
 def EPSILON() -> Decimal:
     return Decimal('1') / (Decimal('10') ** Decimal(str(getcontext().prec // 2)))
+
+def get_horizontal_line(circle: Circle, y: Decimal):
+    """Get the horizontal line that intersects the circle at y."""
+    y_offset = circle.y - y
+
+    if abs(y_offset) > circle.r:
+        return None
+    
+    x_offset = (circle.r ** 2 - y_offset ** 2).sqrt()
+
+    return HorizontalLine(circle.x - x_offset, circle.x + x_offset)
+
+def get_line_union(lines: list[HorizontalLine]) -> list[HorizontalLine]:
+    """Get the union of a list of horizontal lines."""
+    if not lines:
+        return []
+
+    lines.sort(key=lambda line: line.start)
+    union: list[HorizontalLine] = []
+    current_line = lines[0]
+
+    for line in lines[1:]:
+        if line.start <= current_line.end:
+            current_line = HorizontalLine(current_line.start, max(current_line.end, line.end))
+        else:
+            union.append(current_line)
+            current_line = line
+
+    union.append(current_line)
+    return union
+
+def do_circles_cover_unit_circle(circles: list[Circle], y: Decimal) -> bool:
+    lines = [line for circle in circles for line in [get_horizontal_line(circle, y)] if line is not None]
+    union = get_line_union(lines)
+
+    unit_circle_line = get_horizontal_line(UNIT_CIRCLE, y)
+
+    if unit_circle_line is None:
+        return True
+    
+    return any(union_line.start <= unit_circle_line.start and union_line.end >= unit_circle_line.end for union_line in union)
+
+def covers_unit_circle_2(circles: list[Circle]) -> bool:
+    y = Decimal(-1)
+    # circles.sort(key=lambda circle: circle.x + circle.r, reverse=True)
+    while y < 1:
+        if not do_circles_cover_unit_circle(circles, y):
+            return False
+        y += EPSILON()
+
+    return True
 
 def covers_unit_circle(circles: list[Circle]) -> bool:
     def is_point_covered(circle: Circle, x: Decimal, y: Decimal) -> bool:

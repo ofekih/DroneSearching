@@ -190,3 +190,17 @@ def atan(x: Decimal) -> Decimal:
     
     getcontext().prec -= 2
     return +s
+
+def acot(x: Decimal) -> Decimal:
+    """Return the arc cotangent (inverse cotangent) of x in radians.
+    
+    The arc cotangent is defined as π/2 - arctan(x).
+    
+    >>> print(acot(Decimal('0')))
+    1.570796326794896619231321692
+    >>> print(acot(Decimal('1')))
+    0.7853981633974483096156608458
+    >>> print(acot(Decimal('-1')))
+    2.356194490192344928846982537
+    """
+    return pi() / 2 - atan(x)

@@ -2,8 +2,8 @@ from typing import Callable
 from decimal import Decimal, getcontext
 import argparse
 import time
-from decimal_math import asin, cos, log2, pi, sin
-from utils import EPSILON, Circle, covers_unit_circle, draw_circles, binary_search
+from decimal_math import asin, atan, cos, log2, pi, sin
+from utils import EPSILON, Circle, covers_unit_circle, draw_circles, binary_search, get_biggest_uncovered_square, get_distance_traveled
 
 def place_algorithm_4(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
     circles: list[Circle] = []
@@ -191,9 +191,6 @@ def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
         if current_radius < EPSILON():
             return [] # failure
 
-        def evaluate(b: Decimal):
-            return compute_R_T(circles[0].r, b) > current_radius, 0
-        
         theta = 0
         points = None
         
@@ -209,15 +206,20 @@ def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
             new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
             theta = 2 * pi()
         else:
-            if current_radius ** 2 < compute_x2(circles[0].r, current_radius):
-                b = binary_search(Decimal(0), 2 * current_radius + EPSILON(), evaluate, debug=False)[0]
+            R = circles[0].r
+            r = current_radius
+            B = (1 - R) / 2
+            if current_radius ** 2 < compute_x2(circles[0].r, current_radius) and B < current_radius:
+                theta = atan((4 * r ** 2 - (1 - R) ** 2).sqrt() / (R + 1))
+                distance_from_center = (1 + R) / (2 * cos(theta))
+                new_circle_center = (distance_from_center * cos(current_angle + theta), distance_from_center * sin(current_angle + theta))
             else:
                 b = 2 * current_radius
-            
-            theta = asin(b / 2)
-            distance_from_center = (1 - b ** 2 / 4).sqrt() - abs(current_radius ** 2 - b ** 2 / 4).sqrt()
+                theta = asin(b / 2)
 
-            new_circle_center = (distance_from_center * cos(current_angle + theta), distance_from_center * sin(current_angle + theta))
+                current_coord = (cos(current_angle), sin(current_angle))
+                next_coord = (cos(current_angle + 2 * theta), sin(current_angle + 2 * theta))
+                new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
 
         current_angle += 2 * theta
 
@@ -232,11 +234,38 @@ def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
     
     return circles
 
+def place_algorithm_10(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+    # algorithm 5 + additional circles
+    circles = place_algorithm_5(p, pk)[:-1]
+    # circles = []
+
+    k = Decimal(len(circles) + 1)
+    while True:
+        current_radius = pk(p, k)
+
+        biggest_uncovered_square = get_biggest_uncovered_square(circles)
+        if biggest_uncovered_square is None:
+            break
+
+        if current_radius < EPSILON():
+            return []
+
+        new_circle = Circle(
+            biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
+            biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
+            current_radius
+        )
+        
+        circles.append(new_circle)
+        k += 1
+
+    return circles
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 5.75, 6, 6.5],
-                       help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment')
+    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 5.75, 6, 6.5, 10],
+                       help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment, 10: Reordered Chords + Square Fill')
     parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
     parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
     parser.add_argument('--debug', action='store_true', help='Enable debug output')
@@ -269,8 +298,10 @@ def get_placement_algorithm(algorithm: float) -> Callable[[Decimal, Callable[[De
         return lambda p, pk: place_algorithm_6(p, pk, final_optimization=False)
     elif algorithm == 6.5:
         return place_algorithm_6
+    elif algorithm == 10:
+        return place_algorithm_10
     else:
-        raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, or 6.")
+        raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, 5.75, 6, 6.5, or 10.")
 
 def create_evaluator(
     place_algorithm: Callable[[Decimal, Callable[[Decimal, Decimal], Decimal]], list[Circle]],
@@ -295,7 +326,7 @@ def run_simulation(
     find_all: bool = False,
     precision: int = 5,
     debug: bool = False
-) -> tuple[Decimal, Decimal, list[Circle], float]:
+) -> tuple[Decimal, Decimal, Decimal, list[Circle], float]:
     """
     Run the circle packing simulation with the specified parameters.
     
@@ -324,13 +355,14 @@ def run_simulation(
     cpu_time = time.process_time() - start_time
     
     c = calculate_result(p, c_multiplier)
-    return p, c, circles, cpu_time
+    ct = get_distance_traveled(circles, debug=debug)
+    return p, c, ct, circles, cpu_time
 
 def main() -> None:
     """Main execution function for command-line usage."""
     args = parse_args()
     
-    p, c, circles, cpu_time = run_simulation(
+    p, c, ct, circles, cpu_time = run_simulation(
         algorithm=args.algorithm,
         find_all=args.find_all,
         precision=args.precision,
@@ -340,14 +372,23 @@ def main() -> None:
     # Format output with requested precision
     p_str = f"{p:.{args.precision}f}"
     c_str = f"{c:.{args.precision}f}"
-    print(f"p = {p_str}, c = {c_str}")
+    ct_str = f"{ct:.{args.precision}f}"
+    print(f"p = {p_str}, c = {c_str}, ct = {ct_str}")
     print(f"CPU Time: {cpu_time:.3f} seconds")
     
     draw_circles(circles,
         title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
         p=p,
         c=c,
+        ct=ct,
         cpu_time=cpu_time)
 
 if __name__ == '__main__':
     main()
+    # getcontext().prec = 7
+    # circles = place_algorithm_5(Decimal('0.79'))
+    # # for square in get_all_uncovered_squares(circles):
+    # #     print(square)
+    # squares = list(get_all_uncovered_squares(circles))
+    # # square = get_biggest_uncovered_square(circles)
+    # draw_circles(circles, squares=squares)

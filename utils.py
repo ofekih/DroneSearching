@@ -1,10 +1,13 @@
 from collections import deque
 from decimal import Decimal, getcontext
+from decimal_math import pi
 from functools import cache
 from typing import Generator, NamedTuple, Callable, TypeVar, TypedDict
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import Circle as PltCircle
+from shapely import Polygon
+import shapely
 
 OKABE_COLORS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=OKABE_COLORS) # type: ignore
@@ -38,7 +41,8 @@ def get_circles_plot(circles: list[Circle], *,
                     ct: Decimal | None = None,
                     cpu_time: float | None = None,
                     ax: Axes | None = None,
-                    squares: list[Square] = []):
+                    squares: list[Square] = [],
+                    polygons: list[Polygon] = []):
     """Plot circles on either a new figure or an existing axes."""
     if ax is None:
         fig, ax = plt.subplots(1, 1) # type: ignore
@@ -58,6 +62,11 @@ def get_circles_plot(circles: list[Circle], *,
         
     for square in squares:
         ax.add_patch(plt.Rectangle((float(square.x), float(square.y)), float(square.side_length), float(square.side_length), fill=False, color='black')) # type: ignore
+
+    for polygon in polygons:
+        x, y = polygon.exterior.xy
+        # print(x, y)
+        ax.plot(x, y, color='black') # type: ignore
 
     # Add statistics if provided
     stat_text: list[str] = []
@@ -89,9 +98,10 @@ def draw_circles(circles: list[Circle], *,
                 c: Decimal | None = None,
                 ct: Decimal | None = None,
                 cpu_time: float | None = None,
-                squares: list[Square] = []) -> None:
+                squares: list[Square] = [],
+                polygons: list[Polygon] = []) -> None:
     """Draw a single set of circles."""
-    get_circles_plot(circles, title=title, p=p, c=c, ct=ct, cpu_time=cpu_time, squares=squares)
+    get_circles_plot(circles, title=title, p=p, c=c, ct=ct, cpu_time=cpu_time, squares=squares, polygons=polygons)
     plt.show() # type: ignore
 
 @cache
@@ -138,6 +148,16 @@ def do_circles_cover_unit_circle(circles: list[Circle], y: Decimal) -> bool:
         return True
     
     return any(union_line.start <= unit_circle_line.start and union_line.end >= unit_circle_line.end for union_line in union)
+
+def covers_unit_circle_3(circles: list[Circle]) -> bool:
+    quad_segs = int(pi() / 2 / EPSILON())
+    unit_circle = shapely.Point(0, 0).buffer(1, quad_segs=quad_segs)
+
+    circle_polygons = [shapely.Point(float(circle.x), float(circle.y)).buffer(float(circle.r), quad_segs=quad_segs) for circle in circles]
+
+    diff = unit_circle.difference(shapely.union_all(circle_polygons))
+
+    return diff.area < EPSILON()
 
 def covers_unit_circle_2(circles: list[Circle]) -> bool:
     y = Decimal(-1)

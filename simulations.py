@@ -2,6 +2,9 @@ from typing import Callable
 from decimal import Decimal, getcontext
 import argparse
 import time
+
+from shapely import Point
+import shapely
 from decimal_math import asin, atan, cos, log2, pi, sin
 from utils import EPSILON, Circle, covers_unit_circle, draw_circles, binary_search, get_biggest_uncovered_square, get_distance_traveled
 
@@ -236,7 +239,7 @@ def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
 
 def place_algorithm_10(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
     # algorithm 5 + additional circles
-    circles = place_algorithm_5(p, pk)[:-1]
+    circles = place_algorithm_6(p, pk)[:-1]
     # circles = []
 
     k = Decimal(len(circles) + 1)
@@ -261,10 +264,84 @@ def place_algorithm_10(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = l
 
     return circles
 
+def place_algorithm_11(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+    # algorithm 5 + additional circles
+    circles: list[Circle] = [
+        # Circle(-Decimal('0.3'), Decimal('0'), pk(p, Decimal(1))),
+        # Circle(Decimal('0.6'), Decimal('0.25'), pk(p, Decimal(2))),
+    ]
+    # circles = []
+    # p = Decimal('0.7825317')
+
+    quad_segs = int(pi() / 2 / EPSILON())
+
+    k = Decimal(len(circles) + 1)
+    for _ in range(3 - int(k)):
+        current_radius = pk(p, k)
+
+        biggest_uncovered_square = get_biggest_uncovered_square(circles)
+        if biggest_uncovered_square is None:
+            break
+
+        if current_radius < EPSILON():
+            return []
+
+        new_circle = Circle(
+            biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
+            biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
+            current_radius
+        )
+        
+        circles.append(new_circle)
+        k += 1
+
+    # added first two circles, now let's attempt the centroid method
+    unit_circle = shapely.Point(0, 0).buffer(1, quad_segs)
+    circle_polygons = [shapely.Point(float(circle.x), float(circle.y)).buffer(float(circle.r), quad_segs) for circle in circles]
+    uncovered_polygons = unit_circle.difference(shapely.unary_union(circle_polygons))
+
+    # print(circles)
+    # return []
+
+    while True:
+        current_radius = pk(p, k)
+
+        # print(k, current_radius)
+
+        if current_radius < EPSILON():
+            break
+
+        if uncovered_polygons.area < 1e-5:
+            biggest_uncovered_square = get_biggest_uncovered_square(circles)
+            if biggest_uncovered_square is None:
+                break
+            
+            new_circle = Circle(
+                biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
+                biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
+                current_radius
+            )
+            
+            circles.append(new_circle)
+            k += 1
+            continue
+        
+        # print(f'Remaining area: {uncovered_polygons.area}')
+
+        largest_polygon = max(uncovered_polygons.geoms, key=lambda p: p.area) if hasattr(uncovered_polygons, 'geoms') else uncovered_polygons
+        centroid = largest_polygon.centroid
+        new_circle = Circle(Decimal(centroid.x), Decimal(centroid.y), current_radius)
+        circles.append(new_circle)
+        k += 1
+
+        uncovered_polygons = uncovered_polygons.difference(shapely.Point(float(centroid.x), float(centroid.y)).buffer(float(current_radius), quad_segs))
+
+    return circles
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 5.75, 6, 6.5, 10],
+    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 5.75, 6, 6.5, 10, 11],
                        help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment, 10: Reordered Chords + Square Fill')
     parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
     parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
@@ -300,6 +377,8 @@ def get_placement_algorithm(algorithm: float) -> Callable[[Decimal, Callable[[De
         return place_algorithm_6
     elif algorithm == 10:
         return place_algorithm_10
+    elif algorithm == 11:
+        return place_algorithm_11
     else:
         raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, 5.75, 6, 6.5, or 10.")
 
@@ -386,9 +465,43 @@ def main() -> None:
 if __name__ == '__main__':
     main()
     # getcontext().prec = 7
-    # circles = place_algorithm_5(Decimal('0.79'))
-    # # for square in get_all_uncovered_squares(circles):
-    # #     print(square)
-    # squares = list(get_all_uncovered_squares(circles))
-    # # square = get_biggest_uncovered_square(circles)
-    # draw_circles(circles, squares=squares)
+    # circles = place_algorithm_11(Decimal('0.76'))
+    # # # # for square in get_all_uncovered_squares(circles):
+    # # # #     print(square)
+    # # # squares = list(get_all_uncovered_squares(circles))
+    # square = get_biggest_uncovered_square(circles)
+    # print(square)
+    # # print(square, square.side_length ** 2   )
+    
+    # draw_circles(circles, squares=[square])
+
+    # unit_circle = shapely.set_precision(Point(0, 0).buffer(1, 32), 0.000000000001)
+
+    # other_circles = [shapely.set_precision(Point(float(circle.x), float(circle.y)).buffer(float(circle.r), 32), 0.000000000001) for circle in circles]
+    # unit_circle = unit_circle.difference(shapely.union_all(other_circles))
+
+    # other_circle_union = shapely.unary_union(other_circles, axis=None)  # type: BaseGeometry
+
+    # print(type(other_circle_union))
+
+    # print(unit_circle)
+
+    # print area
+    # print(unit_circle.area, unit_circle.is_empty)
+
+    # # centers = [shapely.centroid(p) for p in unit_circle.geoms]
+    # # print(centers)
+    # centers = [shapely.minimum_bounding_circle(p) for p in unit_circle.geoms]
+
+    # print(centers)
+
+    # draw_circles([], polygons=list(unit_circle.geoms) + centers, title="Uncovered Area")
+
+
+    # circles = [Circle(x=Decimal('-0.25'), y=Decimal('-0.25'), r=Decimal('0.7825317')), Circle(x=Decimal('0.625'), y=Decimal('0.125'), r=Decimal('0.61235586'))]
+
+    # unit_circle = shapely.Point(0, 0).buffer(1)
+    # circle_polygons = [shapely.Point(float(circle.x), float(circle.y)).buffer(float(circle.r)) for circle in circles]
+    # uncovered_polygons = unit_circle.difference(shapely.unary_union(circle_polygons))
+
+    # draw_circles(circles, polygons=uncovered_polygons.geoms, title="Algorithm 11")

@@ -394,7 +394,8 @@ class ObjectiveFunctionWrapper:
 
 def optimize_circle_placement(p: float, k: int, pk: Callable[[float, int], float],
                           callback: Optional[Callable[[list[float], float], bool]] = None,
-                          optimization_kwargs: Optional[dict[str, Any]] = None) -> OptimizeResult:
+                          optimization_kwargs: Optional[dict[str, Any]] = None,
+                          x0: Optional[list[float]] = None) -> OptimizeResult:
     """Optimize the placement of k circles with parameter p and radius function pk."""
     # Create bounds for optimization
     # First parameter (dx) is between 0 and 1
@@ -413,6 +414,8 @@ def optimize_circle_placement(p: float, k: int, pk: Callable[[float, int], float
         'bounds': bounds,
         'seed': 0,  # For reproducibility
         'mutation': (0.5, 1.0),  # Allow mutation rate to adapt
+        'workers': -1,  # Use all available cores
+        'updating': 'deferred',  # Use deferred updating,
     }
     
     # Update with any custom parameters
@@ -421,13 +424,16 @@ def optimize_circle_placement(p: float, k: int, pk: Callable[[float, int], float
     
     if callback:
         kwargs['callback'] = callback
+
+    if x0 is not None:
+        kwargs['x0'] = x0
     
-    result = optimize.differential_evolution(obj_func, **kwargs) # type: ignore
-    return result
+    return optimize.differential_evolution(obj_func, **kwargs) # type: ignore
 
 def place_algorithm_11(p: float, pk: Callable[[float, int], float] = default_pk,
                       initial_circles: int = 6,
-                      optimization_kwargs: Optional[dict[str, Any]] = None) -> list[Circle]:
+                      optimization_kwargs: Optional[dict[str, Any]] = None,
+                      initial_guess: Optional[list[Circle]] = None) -> list[Circle]:
     """Algorithm that uses differential evolution to optimize circle placement."""
     start_time = time.time()
     best_score = float('inf')
@@ -443,8 +449,13 @@ def place_algorithm_11(p: float, pk: Callable[[float, int], float] = default_pk,
             print(f"Iteration {iterations}: New best score = {best_score:.6f} (elapsed: {elapsed:.2f}s)")
         return False
 
+    # Convert initial guess to optimization parameters if provided
+    x0 = None
+    if initial_guess is not None:
+        x0 = params_from_created_circles(initial_guess[:initial_circles])
+
     # Run the optimization
-    result: OptimizeResult = optimize_circle_placement(p, initial_circles, pk, progress_callback, optimization_kwargs)
+    result: OptimizeResult = optimize_circle_placement(p, initial_circles, pk, progress_callback, optimization_kwargs, x0)
 
     if not result.success:
         print(f"Warning: Optimization may not have converged: {result.message}")
@@ -549,8 +560,8 @@ def run_simulation(
     if precision < 1:
         raise ValueError('Precision must be at least 1')
     
-    # Set precision to double the requested precision for internal calculations
-    # calc_precision = (precision + 2) * 2
+    calc_precision = (precision + 2) * 2
+    PRECISION.set_precision(calc_precision)
     
     pk, c_multiplier = get_configuration(argparse.Namespace(find_all=find_all))
     place_algorithm = get_placement_algorithm(algorithm)
@@ -590,7 +601,8 @@ def main() -> None:
         cpu_time=cpu_time)
 
 if __name__ == '__main__':
-    # main()
+    main()
+    exit(0)
     # p = 2 ** (-1 / 2.5)
     PRECISION.set_precision(7)
     print(PRECISION.epsilon)
@@ -619,4 +631,4 @@ if __name__ == '__main__':
     print(circles, len(circles), get_empty_area(circles), covers_unit_circle(circles))
     print(square)
 
-    # draw_circles(circles, squares=[], title='Algorithm 11')
+    draw_circles(circles, squares=[], title='Algorithm 11')

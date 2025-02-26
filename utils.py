@@ -44,12 +44,15 @@ class Precision:
         self.unit_circle_polygon = self.get_circle_polygon(UNIT_CIRCLE)
 
     def set_precision(self, precision: int) -> None:
+        if precision == self.precision:
+            return
+
         self.precision = precision
         self.epsilon = 1 / 10 ** (precision // 2)
         self.unit_circle_polygon = self.get_circle_polygon(UNIT_CIRCLE)
 
     def get_circle_polygon(self, circle: Circle) -> Polygon:
-        quad_segs = int(circle.r * math.pi / 2 / self.epsilon)
+        quad_segs = min(math.ceil(circle.r * math.pi / 2 / self.epsilon), 2 ** 20)
 
         return shapely.Point(circle.x, circle.y).buffer(circle.r, quad_segs=quad_segs)
 
@@ -97,19 +100,19 @@ def get_circles_plot(circles: list[Circle], *,
     if title:
         ax.set_title(title) # type: ignore
     
+    stat_text: list[str] = []
     if p is not None:
-        text = f'$p = {p:.6f}$'
-        if c is not None:
-            text += f'\n$c = {c:.6f}$'
-        if ct is not None:
-            text += f'\n$c_t = {ct:.6f}$'
-        if cpu_time is not None:
-            text += f'\nCPU Time: {cpu_time:.3f}s'
-        # Add text to top right corner
-        ax.text(0.98, 0.98, text, # type: ignore
-                horizontalalignment='right',
-                verticalalignment='top',
-                transform=ax.transAxes) # type: ignore
+        stat_text.append(f"$p = {float(p):.3f}$")
+    if c is not None:
+        stat_text.append(f"$T(n) = {float(c):.3f} \\log n$")
+    if ct is not None:
+        # D(n) = ct * n
+        stat_text.append(f"$D(n) = {float(ct):.3f} n$")
+    if cpu_time is not None:
+        stat_text.append(f"done in {cpu_time:.2f}s")
+
+    if stat_text:
+        ax.set_xlabel(", ".join(stat_text), fontsize=10) # type: ignore
     
     return ax
 

@@ -24,9 +24,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Find required packages
 find_package(benchmark REQUIRED)
 find_package(GTest REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GEOS REQUIRED geos)
 
 # Include directories
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src ${GEOS_INCLUDE_DIRS})
 
 # Set optimization flags for Release builds
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native -flto")
@@ -59,6 +61,20 @@ add_executable(test_algorithms
   src/test_algorithms.cpp
 )
 
+# Add simple test executable
+add_executable(test_simple
+  src/test.cpp
+)
+
+target_compile_options(test_simple PRIVATE 
+  -Wall -Wextra -Wpedantic -Werror=return-type
+)
+
+target_link_libraries(test_simple
+  placement_algorithms
+  ${GEOS_LIBRARIES}
+)
+
 # Apply same compiler flags to executables
 target_compile_options(benchmark_algorithms PRIVATE 
   -Wall -Wextra -Wpedantic -Werror=return-type
@@ -77,10 +93,12 @@ target_link_libraries(benchmark_algorithms
   placement_algorithms
   benchmark::benchmark
   benchmark::benchmark_main
+  ${GEOS_LIBRARIES}
 )
 
 target_link_libraries(test_algorithms
   placement_algorithms
   GTest::GTest
   GTest::Main
+  ${GEOS_LIBRARIES}
 )

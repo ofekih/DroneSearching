@@ -1,53 +1,74 @@
 from collections import deque
-from decimal import Decimal, getcontext
-from decimal_math import pi
-from functools import cache
-from typing import Generator, NamedTuple, Callable, TypeVar, TypedDict
+from dataclasses import dataclass
+from typing import Generator, NamedTuple, TypedDict, Callable
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import Circle as PltCircle
 from shapely import Polygon
 import shapely
+import math
 
 OKABE_COLORS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=OKABE_COLORS) # type: ignore
 plt.rcParams['text.usetex'] = True
 
 class Circle(NamedTuple):
-    x: Decimal
-    y: Decimal
-    r: Decimal
+    x: float
+    y: float
+    r: float
 
 class Square(NamedTuple):
-    x: Decimal
-    y: Decimal
-    side_length: Decimal
+    x: float
+    y: float
+    side_length: float
 
 class HorizontalLine(NamedTuple):
-    start: Decimal
-    end: Decimal
+    start: float
+    end: float
+
 class CirclesPlotKwargs(TypedDict, total=False):
     title: str | None
-    p: Decimal
-    c: Decimal
+    p: float
+    c: float
     cpu_time: float
 
-UNIT_CIRCLE = Circle(Decimal(0), Decimal(0), Decimal(1))
+UNIT_CIRCLE = Circle(0.0, 0.0, 1.0)
+
+@dataclass
+class Precision:
+    precision: int = 7
+    epsilon: float = 1e-3
+    unit_circle_polygon: Polygon = shapely.Point(0.0, 0.0).buffer(1.0)
+
+    def __post_init__(self):
+        self.unit_circle_polygon = self.get_circle_polygon(UNIT_CIRCLE)
+
+    def set_precision(self, precision: int) -> None:
+        self.precision = precision
+        self.epsilon = 1 / 10 ** (precision // 2)
+        self.unit_circle_polygon = self.get_circle_polygon(UNIT_CIRCLE)
+
+    def get_circle_polygon(self, circle: Circle) -> Polygon:
+        quad_segs = int(circle.r * math.pi / 2 / self.epsilon)
+
+        return shapely.Point(circle.x, circle.y).buffer(circle.r, quad_segs=quad_segs)
+
+PRECISION = Precision()
 
 def get_circles_plot(circles: list[Circle], *,
                     title: str | None = None,
-                    p: Decimal | None = None,
-                    c: Decimal | None = None,
-                    ct: Decimal | None = None,
+                    p: float | None = None,
+                    c: float | None = None,
+                    ct: float | None = None,
                     cpu_time: float | None = None,
                     ax: Axes | None = None,
                     squares: list[Square] = [],
                     polygons: list[Polygon] = []):
     """Plot circles on either a new figure or an existing axes."""
     if ax is None:
-        fig, ax = plt.subplots(1, 1) # type: ignore
+        _, ax = plt.subplots(1, 1) # type: ignore
     else:
-        fig = ax.figure
+        _ = ax.figure
     
     # Draw unit circle with dashed lines in black
     ax.add_patch(PltCircle((0, 0), 1, fill=False, linestyle='--', color='black'))
@@ -55,48 +76,48 @@ def get_circles_plot(circles: list[Circle], *,
     # Draw the circles
     for i, circle in enumerate(sorted(circles, key=lambda circle: circle.r, reverse=True)):
         color = OKABE_COLORS[(i + 1) % len(OKABE_COLORS)]
-        ax.add_patch(PltCircle((float(circle.x), float(circle.y)), float(circle.r), fill=False, color=color))
-        ax.text(float(circle.x), float(circle.y), str(i + 1), # type: ignore
+        ax.add_patch(PltCircle((circle.x, circle.y), circle.r, fill=False, color=color))
+        ax.text(circle.x, circle.y, str(i + 1), # type: ignore
                 horizontalalignment='center', verticalalignment='center',
                 color=color, fontsize=18)
         
     for square in squares:
-        ax.add_patch(plt.Rectangle((float(square.x), float(square.y)), float(square.side_length), float(square.side_length), fill=False, color='black')) # type: ignore
+        ax.add_patch(plt.Rectangle((square.x, square.y), square.side_length, square.side_length, fill=False, color='black')) # type: ignore
 
     for polygon in polygons:
         x, y = polygon.exterior.xy
-        # print(x, y)
-        ax.plot(x, y, color='black') # type: ignore
+        ax.plot(x, y, color='black', linewidth=0.5) # type: ignore
 
-    # Add statistics if provided
-    stat_text: list[str] = []
-    if p is not None:
-        stat_text.append(f"$p = {float(p):.3f}$")
-    if c is not None:
-        stat_text.append(f"$T(n) = {float(c):.3f} \\log n$")
-    if ct is not None:
-        # D(n) = ct * n
-        stat_text.append(f"$D(n) = {float(ct):.3f} n$")
-    if cpu_time is not None:
-        stat_text.append(f"done in {cpu_time:.2f}s")
-
-    if stat_text:
-        ax.set_xlabel(", ".join(stat_text), fontsize=10) # type: ignore
-
-    if title:
-        ax.set_title(title, pad=20) # type: ignore
-
-    ax.set_aspect('equal')
-    ax.set_xlim(-1.5, 1.5)
-    ax.set_ylim(-1.5, 1.5)
+    # Set plot limits and aspect ratio
+    ax.set_xlim(-1.1, 1.1) # type: ignore
+    ax.set_ylim(-1.1, 1.1) # type: ignore
+    ax.set_aspect('equal') # type: ignore
     
-    return fig, ax 
+    # Add title and information
+    if title:
+        ax.set_title(title) # type: ignore
+    
+    if p is not None:
+        text = f'$p = {p:.6f}$'
+        if c is not None:
+            text += f'\n$c = {c:.6f}$'
+        if ct is not None:
+            text += f'\n$c_t = {ct:.6f}$'
+        if cpu_time is not None:
+            text += f'\nCPU Time: {cpu_time:.3f}s'
+        # Add text to top right corner
+        ax.text(0.98, 0.98, text, # type: ignore
+                horizontalalignment='right',
+                verticalalignment='top',
+                transform=ax.transAxes) # type: ignore
+    
+    return ax
 
 def draw_circles(circles: list[Circle], *,
                 title: str | None = None,
-                p: Decimal | None = None,
-                c: Decimal | None = None,
-                ct: Decimal | None = None,
+                p: float | None = None,
+                c: float | None = None,
+                ct: float | None = None,
                 cpu_time: float | None = None,
                 squares: list[Square] = [],
                 polygons: list[Polygon] = []) -> None:
@@ -104,41 +125,37 @@ def draw_circles(circles: list[Circle], *,
     get_circles_plot(circles, title=title, p=p, c=c, ct=ct, cpu_time=cpu_time, squares=squares, polygons=polygons)
     plt.show() # type: ignore
 
-@cache
-def EPSILON() -> Decimal:
-    return Decimal('1') / (Decimal('10') ** Decimal(str(getcontext().prec // 2)))
-
-def get_horizontal_line(circle: Circle, y: Decimal):
+def get_horizontal_line(circle: Circle, y: float) -> HorizontalLine | None:
     """Get the horizontal line that intersects the circle at y."""
-    y_offset = circle.y - y
-
-    if abs(y_offset) > circle.r:
+    if abs(y - circle.y) > circle.r:
         return None
-    
-    x_offset = (circle.r ** 2 - y_offset ** 2).sqrt()
 
-    return HorizontalLine(circle.x - x_offset, circle.x + x_offset)
+    delta = (circle.r ** 2 - (y - circle.y) ** 2) ** 0.5
+    return HorizontalLine(circle.x - delta, circle.x + delta)
 
 def get_line_union(lines: list[HorizontalLine]) -> list[HorizontalLine]:
-    """Get the union of a list of horizontal lines."""
+    """Merge horizontal lines into a minimal set of non-overlapping lines."""
     if not lines:
         return []
 
-    lines.sort(key=lambda line: line.start)
-    union: list[HorizontalLine] = []
-    current_line = lines[0]
+    # Sort by start coordinate
+    sorted_lines = sorted(lines, key=lambda line: line.start)
+    merged_lines: list[HorizontalLine] = []
+    current = sorted_lines[0]
 
-    for line in lines[1:]:
-        if line.start <= current_line.end:
-            current_line = HorizontalLine(current_line.start, max(current_line.end, line.end))
+    for line in sorted_lines[1:]:
+        if line.start <= current.end:
+            # Lines overlap, update end point
+            current = HorizontalLine(current.start, max(current.end, line.end))
         else:
-            union.append(current_line)
-            current_line = line
+            # No overlap, add current line and start new one
+            merged_lines.append(current)
+            current = line
 
-    union.append(current_line)
-    return union
+    merged_lines.append(current)
+    return merged_lines
 
-def do_circles_cover_unit_circle(circles: list[Circle], y: Decimal) -> bool:
+def do_circles_cover_unit_circle(circles: list[Circle], y: float) -> bool:
     lines = [line for circle in circles for line in [get_horizontal_line(circle, y)] if line is not None]
     union = get_line_union(lines)
 
@@ -149,37 +166,26 @@ def do_circles_cover_unit_circle(circles: list[Circle], y: Decimal) -> bool:
     
     return any(union_line.start <= unit_circle_line.start and union_line.end >= unit_circle_line.end for union_line in union)
 
-def covers_unit_circle_3(circles: list[Circle]) -> bool:
-    quad_segs = int(pi() / 2 / EPSILON())
-    unit_circle = shapely.Point(0, 0).buffer(1, quad_segs=quad_segs)
-
-    circle_polygons = [shapely.Point(float(circle.x), float(circle.y)).buffer(float(circle.r), quad_segs=quad_segs) for circle in circles]
-
-    diff = unit_circle.difference(shapely.union_all(circle_polygons)) # type: ignore
-
-    return diff.area < EPSILON()
-
 def covers_unit_circle_2(circles: list[Circle]) -> bool:
-    y = Decimal(-1)
-    # circles.sort(key=lambda circle: circle.x + circle.r, reverse=True)
+    y = -1.0
     while y < 1:
         if not do_circles_cover_unit_circle(circles, y):
             return False
-        y += EPSILON()
+        y += PRECISION.epsilon
 
     return True
 
-def is_point_covered(circle: Circle, x: Decimal, y: Decimal) -> bool:
+def is_point_covered(circle: Circle, x: float, y: float) -> bool:
     return (x - circle.x) ** 2 + (y - circle.y) ** 2 <= circle.r ** 2
+
+def is_point_covered_by_any(circles: list[Circle], x: float, y: float) -> bool:
+    return any(is_point_covered(circle, x, y) for circle in circles)
 
 def is_fully_covered(square: Square, circle: Circle) -> bool:
     return is_point_covered(circle, square.x, square.y) and \
             is_point_covered(circle, square.x + square.side_length, square.y) and \
             is_point_covered(circle, square.x, square.y + square.side_length) and \
             is_point_covered(circle, square.x + square.side_length, square.y + square.side_length)
-
-def is_point_covered_by_any(circles: list[Circle], x: Decimal, y: Decimal) -> bool:
-    return any(is_point_covered(circle, x, y) for circle in circles)
 
 def is_square_covered(circles: list[Circle], square: Square) -> bool:
     x, y = square.x, square.y
@@ -203,7 +209,7 @@ def is_square_covered(circles: list[Circle], square: Square) -> bool:
     # Recurse into four sub-quadrants
     new_side_length = square.side_length / 2
 
-    if new_side_length < EPSILON():
+    if new_side_length < PRECISION.epsilon:
         return True
 
     subsquares = [
@@ -213,11 +219,6 @@ def is_square_covered(circles: list[Circle], square: Square) -> bool:
         Square(x + new_side_length, y + new_side_length, new_side_length)
     ]
     return all(is_square_covered(circles, subsquare) for subsquare in subsquares)
-
-def covers_unit_circle(circles: list[Circle]) -> bool:
-    # (x, y) are the bottom left coordinates of the square
-    return all(is_square_covered(circles, Square(Decimal(x), Decimal(y), Decimal(1))) 
-              for x, y in [(-1, -1), (-1, 0), (0, -1), (0, 0)])
 
 def get_all_uncovered_squares(circles: list[Circle]) -> Generator[Square, None, None]:
     def get_uncovered_squares(square: Square) -> Generator[Square, None, None]:
@@ -238,10 +239,10 @@ def get_all_uncovered_squares(circles: list[Circle]) -> Generator[Square, None, 
 
         if num_uncovered_corners == 0 and any(is_fully_covered(square, circle) for circle in circles):
             return
-        
+
         new_side_length = square.side_length / 2
 
-        if new_side_length < EPSILON():
+        if new_side_length < PRECISION.epsilon:
             return
 
         subsquares = [
@@ -253,16 +254,16 @@ def get_all_uncovered_squares(circles: list[Circle]) -> Generator[Square, None, 
         for subsquare in subsquares:
             yield from get_uncovered_squares(subsquare)
 
-    yield from get_uncovered_squares(Square(Decimal(-1), Decimal(-1), Decimal(1)))
-    yield from get_uncovered_squares(Square(Decimal(-1), Decimal(0), Decimal(1)))
-    yield from get_uncovered_squares(Square(Decimal(0), Decimal(-1), Decimal(1)))
-    yield from get_uncovered_squares(Square(Decimal(0), Decimal(0), Decimal(1)))
+    yield from get_uncovered_squares(Square(-1.0, -1.0, 1.0))
+    yield from get_uncovered_squares(Square(-1.0, 0.0, 1.0))
+    yield from get_uncovered_squares(Square(0.0, -1.0, 1.0))
+    yield from get_uncovered_squares(Square(0.0, 0.0, 1.0))
 
 def get_biggest_uncovered_square(circles: list[Circle]):
     # use BFS instead of DFS, first square found is guaranteed to be the biggest
 
-    q = deque([Square(Decimal(-1), Decimal(-1), Decimal(1)), Square(Decimal(-1), Decimal(0), Decimal(1)),
-               Square(Decimal(0), Decimal(-1), Decimal(1)), Square(Decimal(0), Decimal(0), Decimal(1))])
+    q = deque([Square(-1.0, -1.0, 1.0), Square(-1.0, 0.0, 1.0),
+               Square(0.0, -1.0, 1.0), Square(0.0, 0.0, 1.0)])
     
     while q:
         square = q.popleft()
@@ -286,7 +287,7 @@ def get_biggest_uncovered_square(circles: list[Circle]):
 
         new_side_length = square.side_length / 2
 
-        if new_side_length < EPSILON():
+        if new_side_length < PRECISION.epsilon:
             continue
 
         subsquares = [
@@ -300,59 +301,69 @@ def get_biggest_uncovered_square(circles: list[Circle]):
 
     return None
 
-def get_distance_traveled(circles: list[Circle], debug: bool = False):
-    # D(n) = max(dist to get to kth circle + D(r_k * n))
-    # max(d_k / (1 - r_k))
-
-    circles.sort(key=lambda circle: circle.r, reverse=True)
-    distance = Decimal(0)
-    current_point = (Decimal(0), Decimal(0))
-
-    max_ct = Decimal(0)
-
-    for circle in circles:
-        x, y, r = circle
-        distance_to_circle = ((x - current_point[0]) ** 2 + (y - current_point[1]) ** 2).sqrt()
-        distance += distance_to_circle
-
-        ct = distance / (1 - r)
-
-        # if debug:
-        #     print(f"Circle {circles.index(circle) + 1}: {distance}, {r} => {ct}") 
-
-        max_ct = max(max_ct, ct)
-        current_point = (x, y)
-
-    return max_ct
-
-T = TypeVar('T')
-R = TypeVar('R')
+def covers_unit_circle(circles: list[Circle]) -> bool:
+    # (x, y) are the bottom left coordinates of the square
+    return all(is_square_covered(circles, Square(x, y, 1.0)) 
+              for x, y in [(-1.0, -1.0), (-1.0, 0.0), (0.0, -1.0), (0.0, 0.0)])
 
 def binary_search(
-    min_param: Decimal,
-    max_param: Decimal,
-    evaluate: Callable[[Decimal], tuple[bool, R]],
-    debug: bool = True
-) -> tuple[Decimal, R]:
-    """Generic binary search that returns both the parameter and result."""
-    # Initial evaluation to ensure result is bound
-    mid_param = (min_param + max_param) / 2
-    valid, result = evaluate(mid_param)
-    found_valid = False
+    start: float,
+    end: float,
+    evaluator: Callable[[float], tuple[bool, list[Circle]]],
+    debug: bool = False,
+) -> tuple[float, list[Circle]]:
+    """Binary search for the smallest value that works."""
 
-    while max_param - min_param > EPSILON():
-        mid_param = (min_param + max_param) / 2
-        if debug:
-            print(mid_param)
-        valid, current_result = evaluate(mid_param)
-        if valid:
-            max_param = mid_param
-            result = current_result
-            found_valid = True
+    # Keep track of the largest failure and smallest success
+    largest_failure: float | None = None
+    smallest_success: float | None = None
+    smallest_success_circles: list[Circle] | None = None
+
+    # Run binary search
+    while end - start > PRECISION.epsilon:
+        p = (start + end) / 2
+        success, circles = evaluator(p)
+
+        if success:
+            end = p
+            if smallest_success is None or p < smallest_success:
+                smallest_success = p
+                smallest_success_circles = circles
+                if debug:
+                    print(f'p = {p} succeeded')
         else:
-            min_param = mid_param
+            start = p
+            if largest_failure is None or p > largest_failure:
+                largest_failure = p
+                if debug:
+                    print(f'p = {p} failed')
 
-    if not found_valid:
-        raise ValueError("No valid parameter found")
+    if smallest_success_circles is None or smallest_success is None:
+        raise ValueError('No solution found')
 
-    return min_param, result
+    return smallest_success, smallest_success_circles
+
+def covers_unit_circle_3(circles: list[Circle]) -> bool:
+    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
+    diff = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
+
+    return diff.area < PRECISION.epsilon
+
+def get_distance_traveled(circles: list[Circle], debug: bool = False) -> float:
+    """Calculate the total distance traveled between circle centers."""
+    if not circles:
+        return 0.0
+    
+    total_distance = 0.0
+    current = circles[0]
+    
+    for next_circle in circles[1:]:
+        dx = next_circle.x - current.x
+        dy = next_circle.y - current.y
+        distance = math.sqrt(dx * dx + dy * dy)
+        if debug:
+            print(f'Distance from ({current.x:.6f}, {current.y:.6f}) to ({next_circle.x:.6f}, {next_circle.y:.6f}): {distance:.6f}')
+        total_distance += distance
+        current = next_circle
+    
+    return total_distance

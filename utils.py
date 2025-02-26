@@ -10,7 +10,6 @@ import math
 
 OKABE_COLORS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
 plt.rcParams['axes.prop_cycle'] = plt.cycler(color=OKABE_COLORS) # type: ignore
-plt.rcParams['text.usetex'] = True
 
 class Circle(NamedTuple):
     x: float
@@ -102,12 +101,12 @@ def get_circles_plot(circles: list[Circle], *,
     
     stat_text: list[str] = []
     if p is not None:
-        stat_text.append(f"$p = {float(p):.3f}$")
+        stat_text.append(f"p = {float(p):.3f}")
     if c is not None:
-        stat_text.append(f"$T(n) = {float(c):.3f} \\log n$")
+        stat_text.append(f"T(n) = {float(c):.3f} log n")
     if ct is not None:
         # D(n) = ct * n
-        stat_text.append(f"$D(n) = {float(ct):.3f} n$")
+        stat_text.append(f"D(n) = {float(ct):.3f} n")
     if cpu_time is not None:
         stat_text.append(f"done in {cpu_time:.2f}s")
 

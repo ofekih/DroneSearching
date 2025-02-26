@@ -9,7 +9,21 @@ from utils import EPSILON, Circle, covers_unit_circle, draw_circles, binary_sear
 
 from scipy import optimize
 
-def place_algorithm_4(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+def default_pk(p: Decimal, k: Decimal) -> Decimal:
+    """Default pk function that returns p^k"""
+    return p ** k
+
+def find_all_pk(p: Decimal, k: Decimal) -> Decimal:
+    """pk function that returns p^((k+1)/2) for find-all mode"""
+    return p ** ((k + Decimal(1)) / 2)
+
+def get_configuration(args: argparse.Namespace) -> tuple[Callable[[Decimal, Decimal], Decimal], int]:
+    """Get pk function and c_multiplier based on arguments."""
+    if args.find_all:
+        return find_all_pk, 2
+    return default_pk, 1
+
+def place_algorithm_4(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = default_pk) -> list[Circle]:
     circles: list[Circle] = []
 
     current_angle = Decimal('0')
@@ -39,7 +53,7 @@ def place_algorithm_4(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
 
     return circles
 
-def place_algorithm_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+def place_algorithm_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = default_pk) -> list[Circle]:
     chords: list[tuple[Decimal, Decimal]] = []
 
     current_angle = Decimal('0')
@@ -121,7 +135,7 @@ def get_intersections(circle1: Circle, circle2: Circle):
     
     return ((x3, y3), (x4, y4))
 
-def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k, final_optimization: bool = True) -> list[Circle]:
+def place_algorithm_5_5(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = default_pk, final_optimization: bool = True) -> list[Circle]:
     """Central Plus Chords placement algorithm.
     Places a central circle and places surrounding circles."""
     circles: list[Circle] = []
@@ -178,7 +192,7 @@ def compute_x2(R: Decimal, r: Decimal):
 
     return (r - y) ** 2 + z ** 2
 
-def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k, final_optimization: bool = True) -> list[Circle]:
+def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = default_pk, final_optimization: bool = True) -> list[Circle]:
     """Central Plus Optimized Chords placement algorithm.
     Places a central circle and optimizes the placement of surrounding circles."""
     circles: list[Circle] = []
@@ -238,7 +252,7 @@ def place_algorithm_6(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = la
     
     return circles
 
-def place_algorithm_10(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
+def place_algorithm_10(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = default_pk) -> list[Circle]:
     # algorithm 5 + additional circles
     circles = place_algorithm_6(p, pk)[:-1]
     # circles = []
@@ -307,77 +321,109 @@ def add_centroid_circles(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal], 
 
     return circles, uncovered_polygons.area
 
-def place_algorithm_11(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = lambda p, k: p**k) -> list[Circle]:
-    def create_circles_from_params(params: list[float], k: int) -> list[Circle]:
-        """Helper function to create circles from optimization parameters"""
-        circles = []
-        
-        # First circle is constrained to the -x axis
-        dx = Decimal(params[0])
-        circle1 = Circle(-dx, Decimal('0'), pk(p, Decimal(1)))
-        circles.append(circle1)
-        
-        # Add the remaining k-1 circles
-        for i in range(1, k):
-            theta_idx = 2*i - 1
-            d_idx = 2*i
-            
-            theta = Decimal(params[theta_idx])
-            d = Decimal(params[d_idx])
-            
-            circle = Circle(d * cos(theta), d * sin(theta), pk(p, Decimal(i+1)))
-            circles.append(circle)
-            
-        return circles
+# Algorithm 11 helper functions
+def create_circles_from_params(params: list[float], k: int, p: Decimal, pk: Callable[[Decimal, Decimal], Decimal]) -> list[Circle]:
+    """Helper function to create circles from optimization parameters"""
+    circles = []
     
-    num_calls = 0
-    min_area = pi()
-
-    def objective_function(x: list[float]):
-        nonlocal num_calls, min_area
-        k = (len(x) + 1) // 2  # Calculate k based on the length of x
-        
-        # Create circles using the helper function
-        circles = create_circles_from_params(x, k)
-        _, remaining_area = add_centroid_circles(p, pk, circles)
-                
-        num_calls += 1
-        
-        if remaining_area < min_area:
-            min_area = remaining_area
-            param_str = ", ".join([f"{val:.7f}" for val in x])
-            print(f"Call {num_calls}: {param_str} ->\n\t{remaining_area:.6f}")
-
-        return remaining_area
-
-    def optimize_circle_placement(k: int):
-        # Create bounds for optimization
-        # First parameter (dx) is between 0 and 1
-        bounds: list[tuple[float, float]] = [(0, 1)]
-        
-        # For each of the k-1 remaining circles, we need bounds for theta and d
-        # theta can be between -pi and pi
-        # d can be between 0 and 1
-        for _ in range(1, k):
-            bounds.extend([(-float(pi()), float(pi())), (0, 1)])
-        
-        result = optimize.differential_evolution(
-            objective_function,
-            bounds=bounds,
-        )
-        
-        return result
-
-    # Set the number of circles to optimize
-    k = 2
+    # First circle is constrained to the -x axis
+    dx = Decimal(params[0])
+    circle1 = Circle(-dx, Decimal('0'), pk(p, Decimal(1)))
+    circles.append(circle1)
     
+    # Add the remaining k-1 circles
+    for i in range(1, k):
+        theta_idx = 2*i - 1
+        d_idx = 2*i
+        
+        theta = Decimal(params[theta_idx])
+        d = Decimal(params[d_idx])
+        
+        circle = Circle(d * cos(theta), d * sin(theta), pk(p, Decimal(i+1)))
+        circles.append(circle)
+        
+    return circles
+
+def objective_function_global(x: list[float], p: Decimal, k: int, pk: Callable[[Decimal, Decimal], Decimal]) -> float:
+    """Calculate the objective function value (remaining area) for given parameters"""
+    circles = create_circles_from_params(x, k, p, pk)
+    _, remaining_area = add_centroid_circles(p, pk, circles)
+    return remaining_area
+
+class ObjectiveFunctionWrapper:
+    """A pickleable wrapper class for the objective function."""
+    def __init__(self, p: Decimal, k: int, pk: Callable[[Decimal, Decimal], Decimal]):
+        self.p = p
+        self.k = k
+        self.pk = pk
+    
+    def __call__(self, x: list[float]) -> float:
+        return objective_function_global(x, self.p, self.k, self.pk)
+
+def optimize_circle_placement(p: Decimal, k: int, pk: Callable[[Decimal, Decimal], Decimal],
+                          callback: Callable[[int, float], None] | None = None,
+                          optimization_kwargs: dict | None = None):
+    """Optimize the placement of k circles with parameter p and radius function pk."""
+    # Create bounds for optimization
+    # First parameter (dx) is between 0 and 1
+    bounds: list[tuple[float, float]] = [(0, 1)]
+    
+    # For each of the k-1 remaining circles, we need bounds for theta and d
+    # theta can be between -pi and pi
+    # d can be between 0 and 1
+    for _ in range(1, k):
+        bounds.extend([(-float(pi()), float(pi())), (0, 1)])
+    
+    # Create a pickleable objective function
+    obj_func = ObjectiveFunctionWrapper(p, k, pk)
+    
+    # Default optimization parameters
+    kwargs = {
+        'bounds': bounds,
+        'workers': -1,
+        'updating': 'deferred',  # Required when using parallel workers
+        'seed': 42,  # For reproducibility
+        # 'strategy': 'best1bin',  # Good for optimization problems like ours
+        # 'tol': 1e-10,  # Tighter tolerance for better optimization
+        'mutation': (0.5, 1.0),  # Allow mutation rate to adapt
+    }
+    
+    # Update with any custom parameters
+    if optimization_kwargs:
+        kwargs.update(optimization_kwargs)
+    
+    if callback:
+        kwargs['callback'] = callback
+    
+    result = optimize.differential_evolution(obj_func, **kwargs)
+    return result
+
+def place_algorithm_11(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = default_pk,
+                      initial_circles: int = 2,
+                      callback: Callable[[int, float], None] | None = None,
+                      optimization_kwargs: dict | None = None) -> list[Circle]:
+    """Algorithm that uses differential evolution to optimize circle placement.
+    
+    Places initial_circles optimally, then fills remaining space with centroid circles.
+    
+    Args:
+        p: The scaling parameter p
+        pk: The radius function to use (default: p^k)
+        initial_circles: Number of initial circles to optimize (default: 2)
+        callback: Optional callback function called after each optimization iteration 
+                 with (iteration, best_objective_value)
+        optimization_kwargs: Optional dictionary of parameters to pass to differential_evolution
+    """
     # Run the optimization
-    result = optimize_circle_placement(k)
+    result = optimize_circle_placement(p, initial_circles, pk, callback, optimization_kwargs)
 
+    if not result.success:
+        print(f"Warning: Optimization may not have converged: {result.message}")
+    
     print(f"Optimization complete in {result.nit} iterations")
     
     # Create the final circles using the optimized parameters
-    circles = create_circles_from_params(result.x, k)
+    circles = create_circles_from_params(result.x, initial_circles, p, pk)
     
     # Print the positions of all circles
     for i, circle in enumerate(circles):
@@ -389,6 +435,33 @@ def place_algorithm_11(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal] = l
     print(f'Final Remaining Area: {result[1]:.6f}')
     
     return circles
+
+def place_algorithm_5_5_no_optimization(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal]) -> list[Circle]:
+    return place_algorithm_5_5(p, pk, final_optimization=False)
+
+def place_algorithm_6_no_optimization(p: Decimal, pk: Callable[[Decimal, Decimal], Decimal]) -> list[Circle]:
+    return place_algorithm_6(p, pk, final_optimization=False)
+
+def get_placement_algorithm(algorithm: float) -> Callable[[Decimal, Callable[[Decimal, Decimal], Decimal]], list[Circle]]:
+    """Get the appropriate placement algorithm based on argument."""
+    if algorithm == 4:
+        return place_algorithm_4
+    elif algorithm == 5:
+        return place_algorithm_5
+    elif algorithm == 5.5:
+        return place_algorithm_5_5_no_optimization
+    elif algorithm == 5.75:
+        return place_algorithm_5_5
+    elif algorithm == 6:
+        return place_algorithm_6_no_optimization
+    elif algorithm == 6.5:
+        return place_algorithm_6
+    elif algorithm == 10:
+        return place_algorithm_10
+    elif algorithm == 11:
+        return place_algorithm_11
+    else:
+        raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, 5.75, 6, 6.5, or 10.")
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
@@ -406,33 +479,6 @@ def parse_args() -> argparse.Namespace:
         parser.error('Precision must be at least 1')
         
     return args
-
-def get_configuration(args: argparse.Namespace) -> tuple[Callable[[Decimal, Decimal], Decimal], int]:
-    """Get pk function and c_multiplier based on arguments."""
-    if args.find_all:
-        return (lambda p, k: p ** ((k + 1) / 2)), 2
-    return (lambda p, k: p ** k), 1
-
-def get_placement_algorithm(algorithm: float) -> Callable[[Decimal, Callable[[Decimal, Decimal], Decimal]], list[Circle]]:
-    """Get the appropriate placement algorithm based on argument."""
-    if algorithm == 4:
-        return place_algorithm_4
-    elif algorithm == 5:
-        return place_algorithm_5
-    elif algorithm == 5.5:
-        return lambda p, pk: place_algorithm_5_5(p, pk, final_optimization=False)
-    elif algorithm == 5.75:
-        return place_algorithm_5_5
-    elif algorithm == 6:
-        return lambda p, pk: place_algorithm_6(p, pk, final_optimization=False)
-    elif algorithm == 6.5:
-        return place_algorithm_6
-    elif algorithm == 10:
-        return place_algorithm_10
-    elif algorithm == 11:
-        return place_algorithm_11
-    else:
-        raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, 5.75, 6, 6.5, or 10.")
 
 def create_evaluator(
     place_algorithm: Callable[[Decimal, Callable[[Decimal, Decimal], Decimal]], list[Circle]],
@@ -515,47 +561,4 @@ def main() -> None:
         cpu_time=cpu_time)
 
 if __name__ == '__main__':
-    # main()
-    getcontext().prec = 7
-    circles = place_algorithm_11(Decimal('0.76'))
-    # circles = [Circle(x=Decimal('-0.4559316'), y=Decimal('0'), r=Decimal('0.76')), Circle(x=Decimal('0.6326715'), y=Decimal('0.2425936'), r=Decimal('0.5776')), Circle(x=Decimal('0.3929132'), y=Decimal('-0.6341119'), r=Decimal('0.438976')), Circle(x=Decimal('0.08847175'), y=Decimal('0.8351524'), r=Decimal('0.3336218')), Circle(x=Decimal('-0.1790904'), y=Decimal('-0.8592810'), r=Decimal('0.2535525')), Circle(x=Decimal('-0.3697012'), y=Decimal('0.8570674'), r=Decimal('0.1926999')), Circle(x=Decimal('0.85096475187464515332891323851072229444980621337890625'), y=Decimal('-0.376728526573564204138477862215950153768062591552734375'), r=Decimal('0.1464519')), Circle(x=Decimal('-0.51713609699463380930950506808585487306118011474609375'), y=Decimal('-0.8022813244003079713451143106794916093349456787109375'), r=Decimal('0.1113035')), Circle(x=Decimal('0.47166381955873504239207250066101551055908203125'), y=Decimal('0.83887634093329010998019157341332174837589263916015625'), r=Decimal('0.08459064')), Circle(x=Decimal('-0.59740654310518037650723499609739519655704498291015625'), y=Decimal('0.770928885039575018112145698978565633296966552734375'), r=Decimal('0.06428889')), Circle(x=Decimal('0.07860861237381600030715844695805571973323822021484375'), y=Decimal('-0.9738927010103466397339389004628174006938934326171875'), r=Decimal('0.04885956')), Circle(x=Decimal('-0.6439489543326024634239956867531873285770416259765625'), y=Decimal('-0.749072819819898594317919560126028954982757568359375'), r=Decimal('0.03713326')), Circle(x=Decimal('0.95544327095467374011406036515836603939533233642578125'), y=Decimal('-0.25142437940531447981840074135106988251209259033203125'), r=Decimal('0.02822128')), Circle(x=Decimal('0.83188665918665039011870021568029187619686126708984375'), y=Decimal('-0.53567751202964541956674793254933319985866546630859375'), r=Decimal('0.02144817')), Circle(x=Decimal('-0.66721668392493793664499435180914588272571563720703125'), y=Decimal('0.7365367974490559799249922434682957828044891357421875'), r=Decimal('0.01630061')), Circle(x=Decimal('-0.437529007912684064773856107422034256160259246826171875'), y=Decimal('-0.89033107389682808463504670726251788437366485595703125'), r=Decimal('0.01238846')), Circle(x=Decimal('0.56174084806983370921074083526036702096462249755859375'), y=Decimal('0.8211210575510274889410311516257934272289276123046875'), r=Decimal('0.009415233')), Circle(x=Decimal('-0.681390175979557977115064204554073512554168701171875'), y=Decimal('-0.728452969060096933162640198133885860443115234375'), r=Decimal('0.007155577')), Circle(x=Decimal('0.129165254889673064564448168312082998454570770263671875'), y=Decimal('-0.98870711938976663102351949419244192540645599365234375'), r=Decimal('0.005438239')), Circle(x=Decimal('-0.68461116017606593597832898012711666524410247802734375'), y=Decimal('0.7265675664620612206334726579370908439159393310546875'), r=Decimal('0.004133061')), Circle(x=Decimal('0.416712036607134905796812063272227533161640167236328125'), y=Decimal('0.90649958832595889379746267877635546028614044189453125'), r=Decimal('0.003141127')), Circle(x=Decimal('0.82715638130172164377285071168444119393825531005859375'), y=Decimal('-0.55890149213198458966189718921668827533721923828125'), r=Decimal('0.002387256')), Circle(x=Decimal('0.9725047628775518315791259738034568727016448974609375'), y=Decimal('-0.2263283133827659054926328963119885884225368499755859375'), r=Decimal('0.001814315')), Circle(x=Decimal('-0.5611671620601785814841377941775135695934295654296875'), y=Decimal('0.82564893766047775525152019326924346387386322021484375'), r=Decimal('0.001378879')), Circle(x=Decimal('0.572538515154466409740052768029272556304931640625'), y=Decimal('0.8183285027203999195677397437975741922855377197265625'), r=Decimal('0.001047948'))]
-    # # # # for square in get_all_uncovered_squares(circles):
-    # # # #     print(square)
-    # # # squares = list(get_all_uncovered_squares(circles))
-    square = get_biggest_uncovered_square(circles)
-    print(circles, len(circles))
-    print(square)
-    # # print(square, square.side_length ** 2   )
-    
-    # draw_circles(circles, squares=[])
-
-    # unit_circle = shapely.set_precision(Point(0, 0).buffer(1, 32), 0.000000000001)
-
-    # other_circles = [shapely.set_precision(Point(float(circle.x), float(circle.y)).buffer(float(circle.r), 32), 0.000000000001) for circle in circles]
-    # unit_circle = unit_circle.difference(shapely.union_all(other_circles))
-
-    # other_circle_union = shapely.unary_union(other_circles, axis=None)  # type: BaseGeometry
-
-    # print(type(other_circle_union))
-
-    # print(unit_circle)
-
-    # print area
-    # print(unit_circle.area, unit_circle.is_empty)
-
-    # # centers = [shapely.centroid(p) for p in unit_circle.geoms]
-    # # print(centers)
-    # centers = [shapely.minimum_bounding_circle(p) for p in unit_circle.geoms]
-
-    # print(centers)
-
-    # draw_circles([], polygons=list(unit_circle.geoms) + centers, title="Uncovered Area")
-
-
-    # circles = [Circle(x=Decimal('-0.25'), y=Decimal('-0.25'), r=Decimal('0.7825317')), Circle(x=Decimal('0.625'), y=Decimal('0.125'), r=Decimal('0.61235586'))]
-
-    # unit_circle = shapely.Point(0, 0).buffer(1)
-    # circle_polygons = [shapely.Point(float(circle.x), float(circle.y)).buffer(float(circle.r)) for circle in circles]
-    # uncovered_polygons = unit_circle.difference(shapely.unary_union(circle_polygons))
-
-    # draw_circles(circles, polygons=uncovered_polygons.geoms, title="Algorithm 11")
+    main()

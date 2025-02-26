@@ -155,7 +155,7 @@ def covers_unit_circle_3(circles: list[Circle]) -> bool:
 
     circle_polygons = [shapely.Point(float(circle.x), float(circle.y)).buffer(float(circle.r), quad_segs=quad_segs) for circle in circles]
 
-    diff = unit_circle.difference(shapely.union_all(circle_polygons))
+    diff = unit_circle.difference(shapely.union_all(circle_polygons)) # type: ignore
 
     return diff.area < EPSILON()
 

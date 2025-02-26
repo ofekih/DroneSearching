@@ -1,6 +1,7 @@
 from collections import deque
 from dataclasses import dataclass
 from typing import Generator, NamedTuple, TypedDict, Callable
+from matplotlib import patches
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.patches import Circle as PltCircle
@@ -84,16 +85,16 @@ def get_circles_plot(circles: list[Circle], *,
                 color=color, fontsize=18)
         
     for square in squares:
-        ax.add_patch(plt.Rectangle((square.x, square.y), square.side_length, square.side_length, fill=False, color='black')) # type: ignore
+        ax.add_patch(patches.Rectangle((square.x, square.y), square.side_length, square.side_length, fill=False, color='black'))
 
     for polygon in polygons:
         x, y = polygon.exterior.xy
         ax.plot(x, y, color='black', linewidth=0.5) # type: ignore
 
     # Set plot limits and aspect ratio
-    ax.set_xlim(-1.1, 1.1) # type: ignore
-    ax.set_ylim(-1.1, 1.1) # type: ignore
-    ax.set_aspect('equal') # type: ignore
+    ax.set_xlim(-1.5, 1.5)
+    ax.set_ylim(-1.5, 1.5)
+    ax.set_aspect('equal')
     
     # Add title and information
     if title:

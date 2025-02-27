@@ -304,6 +304,48 @@ def get_biggest_uncovered_square(circles: list[Circle]):
 
     return None
 
+def get_biggest_semicovered_square(circles: list[Circle]):
+    # use BFS instead of DFS, first square found is guaranteed to be the biggest
+
+    q = deque([Square(-1.0, -1.0, 1.0), Square(-1.0, 0.0, 1.0),
+               Square(0.0, -1.0, 1.0), Square(0.0, 0.0, 1.0)])
+    
+    while q:
+        square = q.popleft()
+
+        x, y = square.x, square.y
+        side_length = square.side_length
+        corners = [(x, y), (x + side_length, y), (x, y + side_length), (x + side_length, y + side_length)]
+
+        num_outside_unit_circle = sum(1 for corner in corners if not is_point_covered(UNIT_CIRCLE, *corner))
+
+        if num_outside_unit_circle == 4:
+            continue
+
+        num_uncovered_corners = sum(1 for corner in corners if is_point_covered(UNIT_CIRCLE, *corner) and not is_point_covered_by_any(circles, *corner))
+
+        if num_uncovered_corners > 0:
+            return square
+        
+        if num_uncovered_corners == 0 and any(is_fully_covered(square, circle) for circle in circles):
+            continue
+
+        new_side_length = square.side_length / 2
+
+        if new_side_length < PRECISION.epsilon:
+            continue
+
+        subsquares = [
+            Square(x, y, new_side_length),
+            Square(x + new_side_length, y, new_side_length),
+            Square(x, y + new_side_length, new_side_length),
+            Square(x + new_side_length, y + new_side_length, new_side_length)
+        ]
+
+        q.extend(subsquares)
+
+    return None
+
 def covers_unit_circle(circles: list[Circle]) -> bool:
     # (x, y) are the bottom left coordinates of the square
     return all(is_square_covered(circles, Square(x, y, 1.0)) 

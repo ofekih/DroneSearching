@@ -394,21 +394,27 @@ def covers_unit_circle_3(circles: list[Circle]) -> bool:
 
     return diff.area < PRECISION.epsilon
 
-def get_distance_traveled(circles: list[Circle], debug: bool = False) -> float:
-    """Calculate the total distance traveled between circle centers."""
-    if not circles:
-        return 0.0
-    
-    total_distance = 0.0
-    current = circles[0]
-    
-    for next_circle in circles[1:]:
-        dx = next_circle.x - current.x
-        dy = next_circle.y - current.y
-        distance = math.sqrt(dx * dx + dy * dy)
+def get_distance_traveled(circles: list[Circle], debug: bool = False):
+    # D(n) = max(dist to get to kth circle + D(r_k * n))
+    # max(d_k / (1 - r_k))
+
+    circles.sort(key=lambda circle: circle.r, reverse=True)
+    distance = 0
+    current_point = (0, 0)
+
+    max_ct = 0
+
+    for circle in circles:
+        x, y, r = circle
+        distance_to_circle: float = math.sqrt((x - current_point[0]) ** 2 + (y - current_point[1]) ** 2)
+        distance += distance_to_circle
+
+        ct = distance / (1 - r)
+
         if debug:
-            print(f'Distance from ({current.x:.6f}, {current.y:.6f}) to ({next_circle.x:.6f}, {next_circle.y:.6f}): {distance:.6f}')
-        total_distance += distance
-        current = next_circle
-    
-    return total_distance
+            print(f"Circle {circles.index(circle) + 1}: {distance}, {r} => {ct}") 
+
+        max_ct = max(max_ct, ct)
+        current_point = (x, y)
+
+    return max_ct

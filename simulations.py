@@ -111,39 +111,6 @@ def place_algorithm_5(p: float, pk: PkFunction = default_pk) -> list[Circle]:
 
     return circles
 
-def get_intersections(circle1: Circle, circle2: Circle):
-    """Calculate the intersection points of two circles.
-    Returns tuple of (x3,y3,x4,y4) representing the two intersection points,
-    or None if the circles don't intersect properly."""
-    x0, y0, r0 = circle1.x, circle1.y, circle1.r
-    x1, y1, r1 = circle2.x, circle2.y, circle2.r
-
-    # Calculate distance between circle centers
-    d = math.sqrt((x1-x0)**2 + (y1-y0)**2)
-    
-    # Check intersection conditions
-    if d > r0 + r1:  # Non intersecting
-        return None
-    if d < abs(r0-r1):  # One circle within other
-        return None
-    if d == 0 and r0 == r1:  # Coincident circles
-        return None
-
-    # Calculate intersection points
-    a = (r0**2 - r1**2 + d**2)/(2*d)
-    h = math.sqrt(r0**2 - a**2)
-    
-    x2 = x0 + a*(x1-x0)/d   
-    y2 = y0 + a*(y1-y0)/d   
-    
-    x3 = x2 + h*(y1-y0)/d     
-    y3 = y2 - h*(x1-x0)/d 
-
-    x4 = x2 - h*(y1-y0)/d
-    y4 = y2 + h*(x1-x0)/d
-    
-    return ((x3, y3), (x4, y4))
-
 def place_algorithm_5_5(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
     """Central Plus Chords placement algorithm.
     Places a central circle and places surrounding circles."""
@@ -626,6 +593,7 @@ def get_placement_algorithm(algorithm: float) -> CirclePlacerFunction:
         return place_algorithm_6
     elif algorithm == 10:
         circle_placement_algorithm: CirclePlacerFunction = lambda p, pk: place_algorithm_5(p, pk)[:-1]
+        # circle_placement_algorithm: CirclePlacerFunction = lambda p, pk: place_algorithm_6(p, pk)
         return lambda p, pk: place_algorithm_10(p, pk, circle_placement_algorithm)
     elif algorithm == 11:
         initial_guess_find_one = [Circle(x=-0.4652323341815545, y=0.0, r=0.7606738281250001), Circle(x=0.631835807925796, y=0.1903730016493503, r=0.5786246727943422), Circle(x=0.3697940080061505, y=-0.6721376127407843, r=0.4401446449020478), Circle(x=0.10868020756478226, y=0.809927396170051, r=0.3348065119663595), Circle(x=-0.2268096324157326, y=-0.8507008005358745, r=0.2546785511386293), Circle(x=-0.35105515226951206, y=0.8525717091300288, r=0.19372730843594976), Circle(x=0.8334512813738311, y=-0.45141887403603526, r=0.14736329332032652), Circle(x=0.5066812387531501, y=0.8205098167780042, r=0.11209540045508003), Circle(x=-0.5338611091463583, y=-0.8110230105587689, r=0.0852680373793706), Circle(x=-0.5799133384414544, y=0.7846827534845661, r=0.06486116441007143), Circle(x=0.024957526866519295, y=-0.980222221404978, r=0.049338190228454044), Circle(x=-0.6306083956676077, y=-0.7532837868134962, r=0.03753027003383761), Circle(x=0.9308286536798448, y=-0.3196167621135757, r=0.028548294177204232), Circle(x=-0.6507673738092681, y=0.7465983474462492, r=0.02171594021821259), Circle(x=0.621415822507479, y=0.774187508417866, r=0.01651874737712142), Circle(x=-0.1931950036775884, y=0.9728756836537937, r=0.012565378803184755), Circle(x=-0.6723563363140392, y=-0.7368493091564825, r=0.00955815479605928), Circle(x=-0.6750275665055643, y=0.7343573392884171, r=0.0072706381985297415), Circle(x=0.9514513927696395, y=-0.2968022336890622, r=0.0055305841913874726), Circle(x=-0.18133794081650303, y=0.9813524299000489, r=0.004206970648630317), Circle(x=0.9554387725018909, y=-0.2904077680461287, r=0.0032001324681031375), Circle(x=-0.6814658353052274, y=-0.7300857539758098, r=0.0024342570150191183), Circle(x=-0.682339445375422, y=0.7298309511390368, r=0.0018516756022547286), Circle(x=0.6379088284879326, y=0.7690965724631914, r=0.0014085211688127694), Circle(x=0.07213390677064563, y=-0.9969650230993562, r=0.0010714251894759087), Circle(x=-0.6842523100838022, y=-0.7289071056215444, r=0.000815005100428193), Circle(x=-0.6843349897161745, y=0.7287749660796549, r=0.0006199530496841137), Circle(x=-0.17762853730071212, y=0.9838848899039228, r=0.0004715820595609831), Circle(x=-0.6851032171052384, y=0.7282938748064527, r=0.00035872013052132485), Circle(x=-0.6850662861629557, y=-0.7282949943196, r=0.00027286901490915585), Circle(x=-0.06988362735558888, y=-0.6499857099214075, r=0.00020756431814764528), Circle(x=0.9576159033083701, y=-0.287901726864696, r=0.00015788874446752475), Circle(x=-0.6854133856566726, y=-0.7281474087016567, r=0.00012010183567196199)]

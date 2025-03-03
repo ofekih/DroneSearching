@@ -426,7 +426,7 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
 
     return max_ct
 
-def print_latex_circles(circles: list[Circle]) -> None:
+def print_latex_circles(circles: list[Circle]):
     """Print circles in a LaTeX-friendly format that can be copy-pasted."""
     print("\\def\\circles{")
     for i, circle in enumerate(sorted(circles, key=lambda c: c.r, reverse=True)):
@@ -437,4 +437,61 @@ def print_latex_circles(circles: list[Circle]) -> None:
             print(",")
     print("    }")
 
+def get_intersections(circle1: Circle, circle2: Circle):
+    """Calculate the intersection points of two circles.
+    Returns tuple of (x3,y3,x4,y4) representing the two intersection points,
+    or None if the circles don't intersect properly."""
+    x0, y0, r0 = circle1.x, circle1.y, circle1.r
+    x1, y1, r1 = circle2.x, circle2.y, circle2.r
 
+    # Calculate distance between circle centers
+    d = math.sqrt((x1-x0)**2 + (y1-y0)**2)
+    
+    # Check intersection conditions
+    if d > r0 + r1:  # Non intersecting
+        return None
+    if d < abs(r0-r1):  # One circle within other
+        return None
+    if d == 0 and r0 == r1:  # Coincident circles
+        return None
+
+    # Calculate intersection points
+    a = (r0**2 - r1**2 + d**2)/(2*d)
+    h = math.sqrt(r0**2 - a**2)
+    
+    x2 = x0 + a*(x1-x0)/d   
+    y2 = y0 + a*(y1-y0)/d   
+    
+    x3 = x2 + h*(y1-y0)/d     
+    y3 = y2 - h*(x1-x0)/d 
+
+    x4 = x2 - h*(y1-y0)/d
+    y4 = y2 + h*(x1-x0)/d
+    
+    return ((x3, y3), (x4, y4))
+
+def rotate_circles(circles: list[Circle]):
+    # rotate the circles such that the first circle intersects (1, 0)
+
+    first_circle = circles[0]
+    intersection_with_unit_circle = get_intersections(first_circle, UNIT_CIRCLE)
+    if intersection_with_unit_circle is None:
+        return circles
+    
+    # get the upper intersection point
+    x, y = max(intersection_with_unit_circle, key=lambda point: point[1])
+    
+    # get angle to rotate, angle from x y to origin
+    angle = math.atan2(y, x)
+
+    rotated_circles: list[Circle] = []
+    for circle in circles:
+        x, y = circle.x, circle.y
+        r = circle.r
+
+        new_x = x * math.cos(angle) - y * math.sin(angle)
+        new_y = x * math.sin(angle) + y * math.cos(angle)
+
+        rotated_circles.append(Circle(new_x, -new_y, r))
+    
+    return rotated_circles

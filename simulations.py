@@ -664,8 +664,8 @@ def create_evaluator(
 
 def run_search(evaluator: Callable[[float], tuple[bool, list[Circle]]], debug: bool = False) -> tuple[float, list[Circle]]:
     """Run binary search with the given evaluator."""
-    # return binary_search(0.5, 1, evaluator, debug=debug)
-    return binary_search(0.655, 0.6603396171331406, evaluator, debug=debug)
+    return binary_search(0.5, 1, evaluator, debug=debug)
+    # return binary_search(0.655, 0.6603396171331406, evaluator, debug=debug)
 
 def calculate_result(p: float, c_multiplier: int) -> float:
     """Calculate final result using p and c_multiplier."""

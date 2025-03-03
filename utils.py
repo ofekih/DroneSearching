@@ -407,6 +407,13 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
     for circle in circles:
         x, y, r = circle
         distance_to_circle: float = math.sqrt((x - current_point[0]) ** 2 + (y - current_point[1]) ** 2)
+        
+        if circle == circles[-1]:
+            # Don't need to necessarily travel to center of the last circle, since we are guaranteed that it is there.
+            # Only need to travel to first probe point of the next layer
+            distance_to_circle -= math.sqrt(circles[0].x**2 + circles[0].y**2) * r
+
+
         distance += distance_to_circle
 
         ct = distance / (1 - r)
@@ -418,3 +425,16 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
         current_point = (x, y)
 
     return max_ct
+
+def print_latex_circles(circles: list[Circle]) -> None:
+    """Print circles in a LaTeX-friendly format that can be copy-pasted."""
+    print("\\def\\circles{")
+    for i, circle in enumerate(sorted(circles, key=lambda c: c.r, reverse=True)):
+        print(f"        {{{circle.x}/{circle.y}/{circle.r}}}", end="")
+        if i == len(circles) - 1:
+            print("%")
+        else:
+            print(",")
+    print("    }")
+
+

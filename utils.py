@@ -411,7 +411,11 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
         if circle == circles[-1]:
             # Don't need to necessarily travel to center of the last circle, since we are guaranteed that it is there.
             # Only need to travel to first probe point of the next layer
-            distance_to_circle -= math.sqrt(circles[0].x**2 + circles[0].y**2) * r
+
+            # -1 * sqrt(x^2 + y^2) * r is for getting to the first probe of the next guy.
+            # the second sqrt(x^2 + y^2) * r is for the next layer not needing to
+            # traverse that distance to get to its first probe
+            distance_to_circle -= 2*math.sqrt(circles[0].x**2 + circles[0].y**2) * r
 
 
         distance += distance_to_circle

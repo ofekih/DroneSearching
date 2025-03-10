@@ -77,7 +77,7 @@ def get_circles_plot(circles: list[Circle], *,
     ax.add_patch(PltCircle((0, 0), 1, fill=False, linestyle='--', color='black'))
 
     # Draw the circles
-    for i, circle in enumerate(sorted(circles, key=lambda circle: circle.r, reverse=True)):
+    for i, circle in enumerate(circles):
         color = OKABE_COLORS[(i + 1) % len(OKABE_COLORS)]
         ax.add_patch(PltCircle((circle.x, circle.y), circle.r, fill=False, color=color))
         ax.text(circle.x, circle.y, str(i + 1), # type: ignore
@@ -398,7 +398,7 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
     # D(n) = max(dist to get to kth circle + D(r_k * n))
     # max(d_k / (1 - r_k))
 
-    circles.sort(key=lambda circle: circle.r, reverse=True)
+    # circles.sort(key=lambda circle: circle.r, reverse=True)
     distance = 0
     current_point = (0, 0)
 
@@ -415,7 +415,7 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
             # -1 * sqrt(x^2 + y^2) * r is for getting to the first probe of the next guy.
             # the second sqrt(x^2 + y^2) * r is for the next layer not needing to
             # traverse that distance to get to its first probe
-            distance_to_circle -= 2*math.sqrt(circles[0].x**2 + circles[0].y**2) * r
+            distance_to_circle -= 2 * math.sqrt(circles[0].x**2 + circles[0].y**2) * r
 
 
         distance += distance_to_circle
@@ -432,14 +432,12 @@ def get_distance_traveled(circles: list[Circle], debug: bool = False):
 
 def print_latex_circles(circles: list[Circle]):
     """Print circles in a LaTeX-friendly format that can be copy-pasted."""
-    print("\\def\\circles{")
     for i, circle in enumerate(sorted(circles, key=lambda c: c.r, reverse=True)):
-        print(f"        {{{circle.x}/{circle.y}/{circle.r}}}", end="")
+        print(f"    {{{circle.x}/{circle.y}/{circle.r}}}", end="")
         if i == len(circles) - 1:
             print("%")
         else:
             print(",")
-    print("    }")
 
 def get_intersections(circle1: Circle, circle2: Circle):
     """Calculate the intersection points of two circles.

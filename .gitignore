@@ -44,3 +44,7 @@ compile_commands.json
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# New additions
+data/
+data-old/

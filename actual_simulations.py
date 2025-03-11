@@ -1,6 +1,8 @@
 import math
 import random
 from typing import NamedTuple
+
+from scipy.stats import f
 from algorithms import ALGORITHMS
 from utils import PRECISION, Circle
 import multiprocessing
@@ -8,6 +10,9 @@ from pathlib import Path
 import csv
 import time
 import os
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle as plt_Circle
 
 DATA_DIRECTORY = Path(__file__).parent / "data"
 DATA_DIRECTORY.mkdir(exist_ok=True)
@@ -25,6 +30,45 @@ def save_simulation_results(algorithm: int, n: float, results: list[SimulationRe
 class Position(NamedTuple):
 	x: float
 	y: float
+
+# function that draws:
+# hiker with X
+# drone with D
+# probes with circles
+# given the search area
+def draw_step(probes: list[Circle], search_area: Circle, hiker: Position, drone: Position):	
+	fig, ax = plt.subplots(figsize=(10, 10))
+	
+	# Draw search area
+	search_circle = plt_Circle((search_area.x, search_area.y), search_area.r, 
+							   fill=False, color='blue', linestyle='--', alpha=0.5)
+	ax.add_patch(search_circle)
+	
+	# Draw probes
+	for probe in probes:
+		# Scale and translate probe according to search area
+		probe_circle = plt_Circle((probe.x, probe.y), probe.r,
+								  fill=False, color='green', alpha=0.7)
+		ax.add_patch(probe_circle)
+	
+	# Draw hiker with X
+	ax.plot(hiker.x, hiker.y, 'rx', markersize=10, markeredgewidth=3, label='Hiker')
+	
+	# Draw drone with D
+	ax.plot(drone.x, drone.y, 'bo', markersize=8, label='Drone')
+	ax.text(drone.x, drone.y, 'D', color='white', ha='center', va='center', fontweight='bold')
+	
+	# Set limits and labels
+	max_radius = search_area.r * 1.2
+	ax.set_xlim(search_area.x - max_radius, search_area.x + max_radius)
+	ax.set_ylim(search_area.y - max_radius, search_area.y + max_radius)
+	ax.set_aspect('equal')
+	ax.set_title('Drone Search Visualization')
+	ax.legend()
+	ax.grid(True)
+	
+	plt.show()
+	
 
 def get_random_hiker_position(n: float):
 	r: float = random.uniform(0, n)
@@ -68,25 +112,41 @@ def scale_translate_and_rotate_probes(placement: list[Circle], search_area: Circ
 def find_hiker(placement: list[Circle], search_area: Circle, hiker: Position, drone: Position = Position(0, 0)) -> SimulationResult:
 	# drone distance is drone distance from center
 	if search_area.r < 1.0 + PRECISION.epsilon:
-		return SimulationResult(0, 0, 0)
+		# if drone is far from search area, drone must travel to search area
+		return SimulationResult(0, math.sqrt((drone.x - search_area.x)**2 + (drone.y - search_area.y)**2), 0)
 	
 	probes = scale_translate_and_rotate_probes(placement, search_area, drone)
 
 	num_probes_done = 0
 	total_distance_traveled = 0
+	num_responses = 0
+	found_hiker = False
+
+	# draw_step(probes, search_area, hiker, drone)
 
 	for probe in probes:
-		total_distance_traveled += math.sqrt((probe.x - drone.x)**2 + (probe.y - drone.y)**2)
-		drone = Position(probe.x, probe.y)
+		if probe == probes[-1]:
+			# last probe does not need to be performed
+			found_hiker = True
+		else:
+			total_distance_traveled += math.sqrt((probe.x - drone.x)**2 + (probe.y - drone.y)**2)
+			drone = Position(probe.x, probe.y)
 
-		found_hiker = probe_query(probe, hiker)
-		num_probes_done += 1
+			if probe_query(probe, hiker):
+				found_hiker = True
+				num_responses += 1
+
+			num_probes_done += 1
 
 		if found_hiker:
+			# print probe index
+			# print(num_probes_done, end=', ')
+
 			remaining_work = find_hiker(placement, probe, hiker, drone)
 			num_probes_done += remaining_work.P
 			total_distance_traveled += remaining_work.D
-			num_responses = 1 + remaining_work.num_responses
+			num_responses += remaining_work.num_responses
+
 			
 			return SimulationResult(num_probes_done, total_distance_traveled, num_responses)
 	
@@ -118,7 +178,7 @@ def simulate_specific_algorithm(algorithm: int, n: float, num_simulations: int, 
 		remaining_results = [simulate_algorithm(placement, n) for _ in range(remaining_simulations)]
 		save_simulation_results(algorithm, n, remaining_results)
 
-def run_algorithm_process(algorithm: int, n: float, num_simulations: int):
+def run_algorithm_process(algorithm: int, n: float, num_simulations: int, batch_size: int) -> tuple[int, float]:
 	"""Worker function for multiprocessing that runs a single algorithm's simulations"""
 	# Seed the random number generator with process-specific seed for independence
 	process_seed = int(time.time() * 1000) % 100000 + os.getpid() + algorithm * 1000
@@ -127,7 +187,7 @@ def run_algorithm_process(algorithm: int, n: float, num_simulations: int):
 	start_time = time.time()
 	print(f"Process for algorithm {algorithm} started (PID: {os.getpid()})")
 	
-	simulate_specific_algorithm(algorithm, n, num_simulations)
+	simulate_specific_algorithm(algorithm, n, num_simulations, batch_size)
 	
 	elapsed_time = time.time() - start_time
 	print(f"Algorithm {algorithm} completed in {elapsed_time:.2f} seconds")
@@ -136,7 +196,28 @@ def run_algorithm_process(algorithm: int, n: float, num_simulations: int):
 if __name__ == '__main__':
 	# Parameters for the simulations
 	n = 2**20
-	num_simulations = 2**30
+	num_simulations = 2**25
+
+	# # for i, c in enumerate(ALGORITHMS[6]):
+	# # 	print(f"Circle {i}: {c.r} vs. {ALGORITHMS[6][0].r ** (i + 1)}")
+
+
+	# hiker = Position(x=492983.0212156907, y=-19415.937748734763)
+	# # hiker = Position(x=0, y=0)
+
+	# result = find_hiker(ALGORITHMS[6], Circle(0, 0, n), hiker)
+
+	# print(result)
+
+	# # while True:
+	# # 	hiker = get_random_hiker_position(n)
+	# # 	result = find_hiker(ALGORITHMS[6], Circle(0, 0, n), hiker)
+
+	# # 	if result.P == 78:
+	# # 		print(hiker)
+	# # 		break
+
+	# exit(0)
 	
 	# Setting a reasonable batch size - too large and it will use too much memory
 	# Too small and there will be too much overhead from file operations
@@ -148,11 +229,12 @@ if __name__ == '__main__':
 	multiprocessing.set_start_method('spawn', force=True)
 	
 	# Create a pool of worker processes
-	with multiprocessing.Pool(processes=8) as pool:
+	with multiprocessing.Pool() as pool:
 		# Map each algorithm to a separate process
 		jobs = []
-		for algorithm in range(1, 9):
-			jobs.append(pool.apply_async(run_algorithm_process, (algorithm, n, num_simulations))) # type: ignore
+		for _ in range(num_simulations // batch_size):
+			for algorithm in range(1, 9):
+				jobs.append(pool.apply_async(run_algorithm_process, (algorithm, n, batch_size, batch_size))) # type: ignore
 		
 		# Wait for all jobs to complete and collect results
 		results: list[tuple[int, float]] = []

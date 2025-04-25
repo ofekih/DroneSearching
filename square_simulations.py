@@ -2,7 +2,7 @@ import random
 
 from square_utils import CoordinateType, Point, Hypercube
 
-from square_algorithms import ALGORITHMS
+from square_algorithms import get_algorithms
 
 # set random seed
 # random.seed(0)
@@ -19,10 +19,11 @@ def run_simulation(n: CoordinateType, dims: int, num_iterations: int = 1):
 		hiker = get_random_hiker_position(search_area)
 		print(f'Hiker: {hiker}')
 
-		for algorithm in ALGORITHMS:
+		for algorithm in get_algorithms(dims):
 			result = algorithm(search_area, hiker, drone)
 			print(f'{algorithm.__name__}: {result}')
 
 
 if __name__ == '__main__':
-	run_simulation(16, 6)
+	# run_simulation(16, 6)
+	run_simulation(2**10, 2)

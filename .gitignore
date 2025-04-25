@@ -48,3 +48,5 @@ Thumbs.db
 # New additions
 data/
 data-old/
+data-old-but-newer/
+data-old-but-newest/

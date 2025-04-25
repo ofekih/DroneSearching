@@ -2,7 +2,6 @@ import math
 import random
 from typing import NamedTuple
 
-from scipy.stats import f
 from algorithms import ALGORITHMS
 from utils import PRECISION, Circle
 import multiprocessing
@@ -18,7 +17,7 @@ DATA_DIRECTORY = Path(__file__).parent / "data"
 DATA_DIRECTORY.mkdir(exist_ok=True)
 
 class SimulationResult(NamedTuple):
-	P: float # total number of probes
+	P: int # total number of probes
 	D: float # total distance traveled
 	num_responses: int # number of hiker responses
 
@@ -196,7 +195,7 @@ def run_algorithm_process(algorithm: int, n: float, num_simulations: int, batch_
 if __name__ == '__main__':
 	# Parameters for the simulations
 	n = 2**20
-	num_simulations = 2**25
+	num_simulations = 2**22
 
 	# # for i, c in enumerate(ALGORITHMS[6]):
 	# # 	print(f"Circle {i}: {c.r} vs. {ALGORITHMS[6][0].r ** (i + 1)}")

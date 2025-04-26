@@ -91,7 +91,14 @@ class Point:
 		Returns:
 			True if any coordinate matches, False otherwise.
 		"""
-		return any(c1 == c2 for c1, c2 in zip(self.coordinates, other.coordinates))
+		return any(math.isclose(c1, c2) for c1, c2 in zip(self.coordinates, other.coordinates))
+
+	def __eq__(self, other: object) -> bool:
+		"""Compares two Points for equality."""
+		if not isinstance(other, Point):
+			return False
+		
+		return all(math.isclose(c1, c2) for c1, c2 in zip(self.coordinates, other.coordinates))
 
 def generate_gray_codes(n: int) -> Generator[tuple[int, ...], None, None]:
     """
@@ -235,3 +242,19 @@ class Hypercube:
 		"""
 		for code in generate_gray_codes(self.dimension):
 			yield self.orthant_from_code(code)
+
+	@property
+	def neighbors(self) -> Generator[Hypercube, None, None]:
+		"""
+		Generates all neighbors of the hypercube.
+		"""
+		for dim in range(self.dimension):
+			for offset in (-1, 1):
+				new_center = self.center.offset(offset * self.side_length, dim)
+				yield Hypercube(new_center, self.side_length)
+
+	def __eq__(self, other: object) -> bool:
+		"""Compares two Hypercubes for equality."""
+		if not isinstance(other, Hypercube):
+			return False
+		return self.center == other.center and math.isclose(self.side_length, other.side_length)

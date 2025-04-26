@@ -39,6 +39,6 @@ def run_simulation(n: CoordinateType, dims: int, num_iterations: int = 1):
 
 
 if __name__ == '__main__':
-	verify_algorithms()
+	verify_algorithms(3, 3, n = 2**4)
 	# run_simulation(16, 6)
 	# run_simulation(2**10, 3)

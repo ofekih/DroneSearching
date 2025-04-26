@@ -1,7 +1,6 @@
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from square_utils import Point, Hypercube
-from typing import NamedTuple
 
 class SimulationResult(NamedTuple):
 	P: int # total number of probes
@@ -161,22 +160,173 @@ def domino_2d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 
 	return SimulationResult(num_probes + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
-# def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
-# 	if search_area.dimension != 3:
-# 		raise ValueError("Domino 3D search only works in 3 dimensions.")
+def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
+	if search_area.dimension != 3:
+		raise ValueError("Domino 3D search only works in 3 dimensions.")
 	
-# 	if search_area.side_length <= 1:
-# 		return SimulationResult(0, 0, 0)
+	if search_area.side_length <= 1:
+		return SimulationResult(0, 0, 0, search_area)
 
-	# 
+	def domino_3d_reduction(area: Hypercube, empty_adjacent_3: tuple[Hypercube, Hypercube, Hypercube]) -> SimulationResult:
+		if area.side_length <= 1:
+			return SimulationResult(0, 0, 0, area)
+		
+		nonlocal drone
 
+		candidates = list(area.orthants)
+		known_empty = list(empty_adjacent_3)
+
+		directly_adjacent = [o for o in empty_adjacent_3 if o.center.shares_any_coordinate(area.center)]
+		centers = [area.center.interpolate(o.center, 0.5) for o in directly_adjacent]
+		closest_center = min(centers, key=lambda c: c.distance_to(drone))
+	
+		probe = Hypercube(closest_center, area.side_length)
+		distance_traveled = drone.distance_to(probe.center)
+		drone = probe.center
+
+		num_responses = 0
+		if hiker in probe:
+			num_responses += 1
+			candidates = [c for c in candidates if c in probe]
+		else:
+			candidates = [c for c in candidates if c not in probe]
+			known_empty.append(probe)
+
+		other_center = max(centers, key=lambda c: c.distance_to(drone))
+		probe = Hypercube(other_center, area.side_length)
+		distance_traveled += drone.distance_to(probe.center)
+		drone = probe.center
+
+		if hiker in probe:
+			num_responses += 1
+			candidates = [c for c in candidates if c in probe]
+		else:
+			candidates = [c for c in candidates if c not in probe]
+			known_empty.append(probe)
+
+		# only two candidates left
+		probe = candidates[0]
+		distance_traveled += drone.distance_to(probe.center)
+		drone = probe.center
+
+		if hiker in probe:
+			num_responses += 1
+			candidate = candidates[0]
+		else:
+			candidate = candidates[1]
+
+		empty_adjacent_candidates = [n for n in candidate.neighbors if any(n in e for e in known_empty)]
+		# should have two. 
+		final_empty_candidate = [n1 for n1 in empty_adjacent_candidates[0].neighbors if any(n1 in e for e in known_empty) and any(n1 == n2 for n2 in empty_adjacent_candidates[1].neighbors)][0]
+
+		result = domino_3d_reduction(candidate, (final_empty_candidate, empty_adjacent_candidates[0], empty_adjacent_candidates[1]))
+
+		return SimulationResult(3 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
+
+	def domino_2d_reduction(area: Hypercube, empty_adjacent: Hypercube) -> SimulationResult:
+		if area.side_length <= 1:
+			return SimulationResult(0, 0, 0, area)
+		
+		nonlocal drone
+
+		candidates = list(area.orthants)
+		num_responses = 0
+
+		# move drone to halfway between the two areas
+		center = area.center.interpolate(empty_adjacent.center, 0.5)
+		distance_traveled = drone.distance_to(center)
+		drone = center
+
+		probe = Hypercube(center, area.side_length)
+		if hiker in probe:
+			num_responses += 1
+			empty_adjacent_candidates = [o for o in empty_adjacent.orthants if o in probe]
+			candidates = [c for c in candidates if c in probe]
+		else:
+			empty_adjacent_candidates = [c for c in candidates if c in probe]
+			candidates = [c for c in candidates if c not in probe]
+
+		probe = candidates[0]
+		distance_traveled += drone.distance_to(probe.center)
+		drone = probe.center
+
+		if hiker in probe:
+			num_responses += 1
+			# recurse to 2d reduction
+			empty_adjacent_candidate = [e for e in empty_adjacent_candidates if e.center.shares_any_coordinate(probe.center)][0]
+			result = domino_2d_reduction(probe, empty_adjacent_candidate)
+			return SimulationResult(2 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
+		
+		empty_adjacent_candidates.append(probe)
+
+		# find candidate which does not share a coordinate
+		correct_candidate = [c for c in candidates if not c.center.shares_any_coordinate(probe.center)][0]
+
+		for probe in candidates[1:]:
+			if probe == correct_candidate:
+				continue
+
+			distance_traveled += drone.distance_to(probe.center)
+			drone = probe.center
+
+			if hiker in probe:
+				num_responses += 1
+				correct_candidate = probe
+				break
+
+			empty_adjacent_candidates.append(probe)
+
+		# find two of the candidates which share a coordinate
+		empty_adjacent_candidates = [e for e in empty_adjacent_candidates if e.center.shares_any_coordinate(correct_candidate.center)]
+
+		# find final candidate which lies on a plane with the correct candidate and both empty adjacent candidates
+		final_empty_candidate = [e for e in empty_adjacent_candidates[0].neighbors if any(e == n for n in empty_adjacent_candidates[1].neighbors) and any(e == n for n in correct_candidate.neighbors)][0]
+
+		result = domino_3d_reduction(correct_candidate, (final_empty_candidate, empty_adjacent_candidates[0], empty_adjacent_candidates[1]))
+
+		return SimulationResult(3 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)		
+
+	num_probes = 0
+	distance_traveled = 0
+	num_responses = 0
+
+	orthant_iter = search_area.orthants
+	correct_orthant = next(orthant_iter)
+	empty_orthants: list[Hypercube] = []
+	for probe in orthant_iter:
+		distance_traveled += drone.distance_to(probe.center)
+		drone = probe.center
+
+		num_probes += 1
+		if hiker in probe:
+			num_responses += 1
+			correct_orthant = probe
+			break
+
+		empty_orthants.append(probe)
+
+	if len(empty_orthants) == 0:
+		result = domino_3d_search(correct_orthant, hiker, drone)
+	else:
+		adj_empty_orthants = [e for e in empty_orthants if e.center.shares_any_coordinate(correct_orthant.center)]
+		final_empty_orthant = [] if len(adj_empty_orthants) == 1 else [e for e in adj_empty_orthants[0].neighbors if any(e == n for n in adj_empty_orthants[1].neighbors) and any(e == n for n in correct_orthant.neighbors)]
+
+		if len(final_empty_orthant) > 0:
+			result = domino_3d_reduction(correct_orthant, (final_empty_orthant[0], adj_empty_orthants[0], adj_empty_orthants[1]))
+		else:
+			result = domino_2d_reduction(correct_orthant, adj_empty_orthants[0])
+
+	return SimulationResult(num_probes + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
 ALGORITHMS: list[KidnapperAlgorithm] = [simple_hypercube_search]
 ALGORITHMS_2D: list[KidnapperAlgorithm] = [simple_hypercube_search, domino_2d_search]
+ALGORITHMS_3D: list[KidnapperAlgorithm] = [simple_hypercube_search, domino_3d_search]
 
 def get_algorithms(dims: int) -> list[KidnapperAlgorithm]:
 	match dims:
 		case 2:
 			return ALGORITHMS_2D
+		case 3:
+			return ALGORITHMS_3D
 		case _:
 			return ALGORITHMS

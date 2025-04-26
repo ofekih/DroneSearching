@@ -100,6 +100,10 @@ class Point:
 		
 		return all(math.isclose(c1, c2) for c1, c2 in zip(self.coordinates, other.coordinates))
 
+	@staticmethod
+	def origin(dimensions: int) -> Point:
+		return Point(tuple(0 for _ in range(dimensions)))
+
 def generate_gray_codes(n: int) -> Generator[tuple[int, ...], None, None]:
     """
     Generates binary tuples (using 0s and 1s) of length 'n'

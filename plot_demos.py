@@ -217,15 +217,19 @@ def plot_domino_3d_search(plotter: SquarePlotter, search_area: Hypercube, hiker:
 
 		plot_domino_3d_reduction(correct_candidate, (old_empty_1, old_empty_2, new_empty_candidate))
 
-	orthant_iter = search_area.orthants
-	correct_orthant = next(orthant_iter)
 	empty_orthants: list[Hypercube] = []
+
+	all_orthants = list(search_area.orthants)
+	orthant_ordering = [all_orthants.pop(0)]
+	orthant_ordering += [n for n in orthant_ordering[0].neighbors if n in all_orthants]
+	orthant_ordering += [o for o in all_orthants if o not in orthant_ordering]
+	correct_orthant = orthant_ordering.pop()
 
 	# Visualize initial state
 	plotter.plot_search_state(search_area, hiker, drone)
 	plotter.show(block=False)
 
-	for probe in orthant_iter:
+	for probe in orthant_ordering:
 		drone = probe.center
 
 		# Visualize each orthant probe

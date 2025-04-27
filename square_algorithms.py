@@ -288,10 +288,14 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 	distance_traveled = 0
 	num_responses = 0
 
-	orthant_iter = search_area.orthants
-	correct_orthant = next(orthant_iter)
+	all_orthants = list(search_area.orthants)
+	orthant_ordering = [all_orthants.pop(0)]
+	orthant_ordering += [n for n in orthant_ordering[0].neighbors if n in all_orthants]
+	orthant_ordering += [o for o in all_orthants if o not in orthant_ordering]
+	correct_orthant = orthant_ordering.pop()
+	
 	empty_orthants: list[Hypercube] = []
-	for probe in orthant_iter:
+	for probe in orthant_ordering:
 		distance_traveled += drone.distance_to(probe.center)
 		drone = probe.center
 

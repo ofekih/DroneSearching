@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from matplotlib.figure import Figure
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection  # type: ignore
 import numpy as np
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any
 
 from square_utils import Point, Hypercube
 
@@ -12,10 +12,16 @@ class SquarePlotter:
     Useful for debugging search algorithms.
     """
 
-    def __init__(self, figsize=(10, 8)):
+    fig: Figure  # Type of the figure
+    ax: Any  # Type of the 3D axes (using Any to avoid complex matplotlib types)
+    colors: dict[str, str]  # Mapping of object types to colors
+    alpha: dict[str, float]  # Mapping of object types to alpha values
+    hatches: dict[str, str | None]  # Mapping of object types to hatch patterns
+
+    def __init__(self, figsize: tuple[float, float]=(10, 8)):
         """Initialize the plotter with a figure of the given size."""
-        self.fig = plt.figure(figsize=figsize)
-        self.ax = self.fig.add_subplot(111, projection='3d')
+        self.fig = plt.figure(figsize=figsize)  # type: ignore
+        self.ax = self.fig.add_subplot(111, projection='3d')  # type: ignore
         self.colors = {
             'empty': 'lightgray',
             'candidate': 'lightblue',
@@ -37,7 +43,7 @@ class SquarePlotter:
             'probe': None
         }
 
-    def _get_cube_vertices(self, cube: Hypercube) -> np.ndarray:
+    def _get_cube_vertices(self, cube: Hypercube) -> np.ndarray[Any, np.dtype[np.float64]]:  # type: ignore
         """Get the vertices of a 3D cube from its center and side length."""
         if cube.dimension > 3:
             raise ValueError("Can only visualize up to 3D cubes")
@@ -71,8 +77,14 @@ class SquarePlotter:
 
         return vertices
 
-    def _get_cube_faces(self, vertices: np.ndarray) -> List[List[int]]:
-        """Get the faces of a cube from its vertices."""
+    def _get_cube_faces(self, vertices: np.ndarray[Any, Any]) -> list[list[int]]:  # type: ignore
+        """
+        Get the faces of a cube from its vertices.
+
+        Args:
+            vertices: The vertices of the cube (not used directly, but needed for type checking)
+        """
+        # The faces are defined by vertex indices, not the actual vertices
         faces = [
             [0, 1, 2, 3],  # bottom
             [4, 5, 6, 7],  # top
@@ -83,7 +95,7 @@ class SquarePlotter:
         ]
         return faces
 
-    def plot_hypercube(self, cube: Hypercube, cube_type: str = 'search_area', label: Optional[str] = None):
+    def plot_hypercube(self, cube: Hypercube, cube_type: str = 'search_area', label: str | None = None) -> None:
         """
         Plot a hypercube with the specified type (determines color, transparency, and hatching).
 
@@ -107,16 +119,16 @@ class SquarePlotter:
         hatch = self.hatches.get(cube_type, None)
 
         # Create the polygon collection with appropriate styling
-        poly = Poly3DCollection(face_vertices, alpha=alpha)
-        poly.set_facecolor(color)
-        poly.set_edgecolor('black')
+        poly = Poly3DCollection(face_vertices, alpha=alpha)  # type: ignore
+        poly.set_facecolor(color)  # type: ignore
+        poly.set_edgecolor('black')  # type: ignore
 
         # Set hatching if specified
         if hatch:
-            poly.set_hatch(hatch)
+            poly.set_hatch(hatch)  # type: ignore
 
         # Add to the plot
-        self.ax.add_collection3d(poly)
+        self.ax.add_collection3d(poly)  # type: ignore
 
         # Add label if provided
         if label:
@@ -126,9 +138,9 @@ class SquarePlotter:
             while len(center_coords) < 3:
                 center_coords.append(0)
             # Convert label to string and use as text
-            self.ax.text(center_coords[0], center_coords[1], center_coords[2], str(label), None)
+            self.ax.text(center_coords[0], center_coords[1], center_coords[2], str(label), None)  # type: ignore
 
-    def plot_point(self, point: Point, point_type: str = 'hiker', label: Optional[str] = None, size: int = 100):
+    def plot_point(self, point: Point, point_type: str = 'hiker', label: str | None = None, size: int = 100) -> None:
         """
         Plot a point with the specified type (determines color).
 
@@ -145,20 +157,21 @@ class SquarePlotter:
 
         x, y, z = coords
         color = self.colors.get(point_type, 'black')
-        self.ax.scatter(x, y, z, c=color, s=size, label=label or point_type)
+        # Use keyword args to avoid parameter conflict
+        self.ax.scatter(x, y, z, c=color, s=size, label=label or point_type)  # type: ignore
 
         # Add label if provided
         if label:
-            self.ax.text(x, y, z, str(label), None)
+            self.ax.text(x, y, z, str(label), None)  # type: ignore
 
     def plot_search_state(self,
                           search_area: Hypercube,
-                          hiker: Optional[Point] = None,
-                          drone: Optional[Point] = None,
-                          empty_regions: List[Hypercube] = [],
-                          candidates: List[Hypercube] = [],
-                          probe: Optional[Hypercube] = None,
-                          title: str = "Search Visualization"):
+                          hiker: Point | None = None,
+                          drone: Point | None = None,
+                          empty_regions: list[Hypercube] = [],
+                          candidates: list[Hypercube] = [],
+                          probe: Hypercube | None = None,
+                          title: str = "Search Visualization") -> None:
         """
         Plot the current state of a search algorithm.
 
@@ -172,7 +185,7 @@ class SquarePlotter:
             title: Title for the plot
         """
         # Clear previous plot
-        self.ax.clear()
+        self.ax.clear()  # type: ignore
 
         # Plot the search area
         self.plot_hypercube(search_area, 'search_area', 'Search Area')
@@ -198,16 +211,16 @@ class SquarePlotter:
             self.plot_point(drone, 'drone', 'Drone')
 
         # Set title and labels
-        self.ax.set_title(title)
-        self.ax.set_xlabel('X')
-        self.ax.set_ylabel('Y')
-        self.ax.set_zlabel('Z')
+        self.ax.set_title(title)  # type: ignore
+        self.ax.set_xlabel('X')  # type: ignore
+        self.ax.set_ylabel('Y')  # type: ignore
+        self.ax.set_zlabel('Z')  # type: ignore
 
         # Add a legend
-        self.ax.legend()
+        self.ax.legend()  # type: ignore
 
         # Set equal aspect ratio
-        self.ax.set_box_aspect([1, 1, 1])
+        self.ax.set_box_aspect((1, 1, 1))  # type: ignore
 
         # Set limits based on search area
         min_corner = search_area.min_corner.coordinates
@@ -223,11 +236,11 @@ class SquarePlotter:
 
         # Add some padding
         padding = search_area.side_length * 0.1
-        self.ax.set_xlim(min_coords[0] - padding, max_coords[0] + padding)
-        self.ax.set_ylim(min_coords[1] - padding, max_coords[1] + padding)
-        self.ax.set_zlim(min_coords[2] - padding, max_coords[2] + padding)
+        self.ax.set_xlim(min_coords[0] - padding, max_coords[0] + padding)  # type: ignore
+        self.ax.set_ylim(min_coords[1] - padding, max_coords[1] + padding)  # type: ignore
+        self.ax.set_zlim(min_coords[2] - padding, max_coords[2] + padding)  # type: ignore
 
-    def show(self, block: bool=False, pause_time: Optional[float]=None):
+    def show(self, block: bool=False, pause_time: float | None=None) -> None:
         """
         Display the plot and wait for user input before continuing.
 
@@ -244,12 +257,12 @@ class SquarePlotter:
 
         if block:
             # If block is True, just use the standard blocking show
-            plt.show(block=True)
+            plt.show(block=True)  # type: ignore
             return
 
         # Add a text annotation to inform the user if we're waiting for input
         if pause_time is None:
-            fig.text(0.5, 0.01, "Click or press any key to continue...",
+            fig.text(0.5, 0.01, "Click or press any key to continue...",  # type: ignore
                    ha="center", fontsize=9, bbox={"facecolor":"lightgrey", "alpha":0.5})
 
         # Draw the figure to the screen
@@ -270,7 +283,7 @@ class SquarePlotter:
             cid_click = fig.canvas.mpl_connect('button_press_event', on_key_or_click)
 
             # Show the plot (non-blocking) and wait for user input
-            plt.show(block=False)
+            plt.show(block=False)  # type: ignore
 
             # Wait for user input
             while not input_received[0]:
@@ -280,7 +293,7 @@ class SquarePlotter:
             fig.canvas.mpl_disconnect(cid_key)
             fig.canvas.mpl_disconnect(cid_click)
 
-    def save(self, filename: str):
+    def save(self, filename: str) -> None:
         """Save the plot to a file."""
         plt.tight_layout()
-        plt.savefig(filename)
+        plt.savefig(filename)  # type: ignore

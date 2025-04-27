@@ -81,6 +81,18 @@ class Point:
 		new_coords = tuple((1 - t) * c1 + t * c2 for c1, c2 in zip(self.coordinates, other.coordinates))
 		return Point(new_coords)
 
+	def num_shared_coordinates(self, other: Point) -> int:
+		"""
+		Counts the number of coordinates that match between this point and another point.
+
+		Args:
+			other: The other Point object. Assumes it has the same dimension.
+
+		Returns:
+			The number of matching coordinates.
+		"""
+		return sum(1 for c1, c2 in zip(self.coordinates, other.coordinates) if math.isclose(c1, c2))
+
 	def shares_any_coordinate(self, other: Point) -> bool:
 		"""
 		Checks if this point shares any coordinate with another point.
@@ -91,7 +103,7 @@ class Point:
 		Returns:
 			True if any coordinate matches, False otherwise.
 		"""
-		return any(math.isclose(c1, c2) for c1, c2 in zip(self.coordinates, other.coordinates))
+		return self.num_shared_coordinates(other) > 0
 
 	def __eq__(self, other: object) -> bool:
 		"""Compares two Points for equality."""

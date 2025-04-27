@@ -217,7 +217,7 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 
 		empty_adjacent_candidates = [n for n in candidate.neighbors if any(n in e for e in known_empty)]
 		# should have two. 
-		final_empty_candidate = [n1 for n1 in empty_adjacent_candidates[0].neighbors if any(n1 in e for e in known_empty) and any(n1 == n2 for n2 in empty_adjacent_candidates[1].neighbors)][0]
+		final_empty_candidate = [n1 for n1 in empty_adjacent_candidates[0].neighbors if any(n1 in e for e in known_empty) and n1 in empty_adjacent_candidates[1].neighbors][0]
 
 		result = domino_3d_reduction(candidate, (final_empty_candidate, empty_adjacent_candidates[0], empty_adjacent_candidates[1]))
 
@@ -253,14 +253,14 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		if hiker in probe:
 			num_responses += 1
 			# recurse to 2d reduction
-			empty_adjacent_candidate = [e for e in empty_adjacent_candidates if e.center.shares_any_coordinate(probe.center)][0]
+			empty_adjacent_candidate = [e for e in empty_adjacent_candidates if e in probe.neighbors][0]
 			result = domino_2d_reduction(probe, empty_adjacent_candidate)
 			return SimulationResult(2 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 		
-		empty_adjacent_candidates.append(probe)
+		new_empty_candidates = [probe]
 
 		# find candidate which does not share a coordinate
-		correct_candidate = [c for c in candidates if not c.center.shares_any_coordinate(probe.center)][0]
+		correct_candidate = [c for c in candidates if not c in probe.neighbors][0]
 
 		for probe in candidates[1:]:
 			if probe == correct_candidate:
@@ -274,15 +274,13 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 				correct_candidate = probe
 				break
 
-			empty_adjacent_candidates.append(probe)
+			new_empty_candidates.append(probe)
 
-		# find two of the candidates which share a coordinate
-		empty_adjacent_candidates = [e for e in empty_adjacent_candidates if e.center.shares_any_coordinate(correct_candidate.center)]
-
-		# find final candidate which lies on a plane with the correct candidate and both empty adjacent candidates
-		final_empty_candidate = [e for e in empty_adjacent_candidates[0].neighbors if any(e == n for n in empty_adjacent_candidates[1].neighbors) and any(e == n for n in correct_candidate.neighbors)][0]
-
-		result = domino_3d_reduction(correct_candidate, (final_empty_candidate, empty_adjacent_candidates[0], empty_adjacent_candidates[1]))
+		new_empty_candidate = [e for e in new_empty_candidates if e in correct_candidate.neighbors][0]
+		old_empty_1 = [e for e in empty_adjacent_candidates if e in correct_candidate.neighbors][0]
+		old_empty_2 = [e for e in empty_adjacent_candidates if e in new_empty_candidate.neighbors][0]
+		
+		result = domino_3d_reduction(correct_candidate, (old_empty_1, old_empty_2, new_empty_candidate))
 
 		return SimulationResult(3 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)		
 
@@ -308,9 +306,9 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 	if len(empty_orthants) == 0:
 		result = domino_3d_search(correct_orthant, hiker, drone)
 	else:
-		adj_empty_orthants = [e for e in empty_orthants if e.center.shares_any_coordinate(correct_orthant.center)]
-		final_empty_orthant = [] if len(adj_empty_orthants) == 1 else [e for e in adj_empty_orthants[0].neighbors if any(e == n for n in adj_empty_orthants[1].neighbors) and any(e == n for n in correct_orthant.neighbors)]
-
+		adj_empty_orthants = [e for e in empty_orthants if e in correct_orthant.neighbors]
+		final_empty_orthant = [] if len(adj_empty_orthants) == 1 else [e for e in adj_empty_orthants[0].neighbors if e in adj_empty_orthants[1].neighbors and e in empty_orthants]
+		
 		if len(final_empty_orthant) > 0:
 			result = domino_3d_reduction(correct_orthant, (final_empty_orthant[0], adj_empty_orthants[0], adj_empty_orthants[1]))
 		else:

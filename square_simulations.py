@@ -16,6 +16,9 @@ def verify_algorithms(min_dim: int = 1, max_dim: int = 10, num_iterations: int =
 			hiker = get_random_hiker_position(search_area)
 
 			for algorithm in get_algorithms(dims):
+				print(f'Verifying {algorithm.__name__} in {dims} dimensions')
+				print(f'Hiker: {hiker}')
+				print(f'Search area: {search_area}')
 				result = algorithm(search_area, hiker, drone)
 				assert hiker in result.area, f'{algorithm.__name__} failed to find hiker in {dims} dimensions'
 				assert result.area.side_length <= 1, f'{algorithm.__name__} final search area too large in {dims} dimensions'

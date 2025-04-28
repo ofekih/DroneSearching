@@ -13,7 +13,7 @@ type KidnapperAlgorithm = Callable[[Hypercube, Point, Point], SimulationResult]
 
 def simple_hypercube_search(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
 	if search_area.side_length <= 1:
-		return SimulationResult(0, 0, 0, search_area)
+		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 	
 	distance_traveled = 0
 	num_probes = 0
@@ -91,11 +91,11 @@ def domino_2d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		raise ValueError("Domino 2D search only works in 2 dimensions.")
 	
 	if search_area.side_length <= 1:
-		return SimulationResult(0, 0, 0, search_area)
+		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 	
 	def domino_2d_reduction(area: Hypercube, empty_adjacent: Hypercube) -> SimulationResult:
 		if area.side_length <= 1:
-			return SimulationResult(0, 0, 0, area)
+			return SimulationResult(0, drone.distance_to(area.center), 0, area)
 		
 		nonlocal drone
 
@@ -165,11 +165,11 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		raise ValueError("Domino 3D search only works in 3 dimensions.")
 	
 	if search_area.side_length <= 1:
-		return SimulationResult(0, 0, 0, search_area)
+		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 
 	def domino_3d_reduction(area: Hypercube, empty_adjacent_3: tuple[Hypercube, Hypercube, Hypercube]) -> SimulationResult:
 		if area.side_length <= 1:
-			return SimulationResult(0, 0, 0, area)
+			return SimulationResult(0, drone.distance_to(area.center), 0, area)
 		
 		nonlocal drone
 
@@ -225,7 +225,7 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 
 	def domino_2d_reduction(area: Hypercube, empty_adjacent: Hypercube) -> SimulationResult:
 		if area.side_length <= 1:
-			return SimulationResult(0, 0, 0, area)
+			return SimulationResult(0, drone.distance_to(area.center), 0, area)
 		
 		nonlocal drone
 

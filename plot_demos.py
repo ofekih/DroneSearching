@@ -280,7 +280,7 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 		empty_regions: list[Hypercube] = []
 		while min_radius + 1 < max_radius:
 			radius = (min_radius + max_radius) / 2
-			probe = pm.Hypercube(new_search_area.center, radius * 2)
+			probe = pm.InsetHypercube(new_search_area.center, radius * 2)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)
 			if hiker in probe:
@@ -298,14 +298,14 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 
 		# Step 2: Figure out which face the hiker is on
 		for dim in range(dims):
-			probe = pm.Hypercube(new_search_area.center.offset(offset_amount, dim), side_length)
+			probe = pm.InsetHypercube(new_search_area.center.offset(offset_amount, dim), side_length)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)
 			if hiker in probe:
 				pm.fix_coordinate(dim, current_radius)
 				break
 
-			probe = pm.Hypercube(new_search_area.center.offset(-offset_amount, dim), side_length)
+			probe = pm.InsetHypercube(new_search_area.center.offset(-offset_amount, dim), side_length)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)
 			if hiker in probe:

@@ -429,7 +429,7 @@ class ProjectionManager:
 		centered_hypercube = self.Hypercube(center, side_length)
 
 		for dim in self._fixed_dimensions:
-			centered_hypercube = centered_hypercube.offset(-math.copysign(side_length / 2, centered_hypercube.center[dim]), dim)
+			centered_hypercube = centered_hypercube.offset(-math.copysign(side_length / 2 - 0.5, centered_hypercube.center[dim]), dim)
 
 
 		return centered_hypercube

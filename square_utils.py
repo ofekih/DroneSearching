@@ -260,6 +260,12 @@ class Hypercube:
 		new_center = Point(tuple(self.center.coordinates[i] + self.side_length / 4 * (2 * code[i] - 1) for i in range(self.dimension)))
 		return Hypercube(new_center, self.side_length / 2)
 
+	def offset(self, offset: CoordinateType, dim: int) -> Hypercube:
+		"""
+		Returns a new Hypercube with the specified offset applied to the given dimension.
+		"""
+		return Hypercube(self.center.offset(offset, dim), self.side_length)
+
 	@property
 	def orthants(self) -> Generator[Hypercube, None, None]:
 		"""
@@ -400,24 +406,33 @@ class ProjectionManager:
 		defined in the current projection space and a side length.
 
 		The center of the resulting d-dimensional hypercube will have coordinates matching
-		the input center_proj for the variable dimensions and the fixed values for the
+		the input center for the variable dimensions and the fixed values for the
 		fixed dimensions.
 
 		Args:
-			center_proj: The center point of the hypercube in the *current* projection space.
-						 Its dimension must match self.current_dimension.
+			center: The center point of the hypercube in the *current* projection space.
+					Its dimension must match self.current_dimension.
 			side_length: The side length of the hypercube.
 
 		Returns:
 			A Hypercube object in the original d-dimensional space.
 
 		Raises:
-			ValueError: If the dimension of center_proj does not match the current
+			ValueError: If the dimension of center does not match the current
 						projection dimension.
 			ValueError: If side_length is negative.
 		"""
 		# Create the Hypercube in the original dimension
 		return Hypercube(center=self.Point(center), side_length=side_length)
+	
+	def InsetHypercube(self, center: Point, side_length: CoordinateType) -> Hypercube:
+		centered_hypercube = self.Hypercube(center, side_length)
+
+		for dim in self._fixed_dimensions:
+			centered_hypercube = centered_hypercube.offset(-math.copysign(side_length / 2, centered_hypercube.center[dim]), dim)
+
+
+		return centered_hypercube
 
 	def __repr__(self) -> str:
 		"""Returns a string representation of the ProjectionManager's state."""

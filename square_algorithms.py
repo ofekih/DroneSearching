@@ -1,6 +1,7 @@
+import random
 from typing import Callable, NamedTuple
 
-from square_utils import Point, Hypercube
+from square_utils import HypercubeGetter, Point, Hypercube, ProjectionManager
 
 class SimulationResult(NamedTuple):
 	P: int # total number of probes
@@ -8,8 +9,24 @@ class SimulationResult(NamedTuple):
 	num_responses: int # number of hiker responses
 	area: Hypercube
 
+def get_random_hiker_position(search_area: Hypercube):
+	return Point(tuple(random.uniform(search_area.center.coordinates[i] - search_area.side_length / 2, search_area.center.coordinates[i] + search_area.side_length / 2) for i in range(search_area.dimension)))
 
-type KidnapperAlgorithm = Callable[[Hypercube, Point, Point], SimulationResult]
+def get_random_hiker_position_non_equal(search_area: Hypercube):
+	# don't allow any two coordinates to be within 1 of each other
+	# loop one coordinate at a time
+	coordinates: list[float] = []
+	for i in range(search_area.dimension):
+		while True:
+			coordinate = random.uniform(search_area.center.coordinates[i] - search_area.side_length / 2, search_area.center.coordinates[i] + search_area.side_length / 2)
+			if all(abs(abs(coordinate) - abs(c)) > 1 for c in coordinates):
+				coordinates.append(coordinate)
+				break
+	return Point(tuple(coordinates))
+
+
+KidnapperAlgorithm = Callable[[Hypercube, Point, Point], SimulationResult]
+HikerGenerator = Callable[[Hypercube], Point]
 
 def simple_hypercube_search(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
 	if search_area.side_length <= 1:
@@ -36,56 +53,6 @@ def simple_hypercube_search(search_area: Hypercube, hiker: Point, drone: Point) 
 
 	return SimulationResult(num_probes + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
-# def central_binary_search(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
-# 	# No optimizations!
-# 	# step 0, check if we are done
-# 	if search_area.side_length <= 1:
-# 		return SimulationResult(0, 0, 0, search_area)
-	
-# 	# step 1, move to center
-# 	distance_traveled = search_area.center.distance_to(drone)
-# 	drone = search_area.center
-# 	num_probes = 0
-# 	num_responses = 0
-
-# 	# step 2, binary search to get width-1 shell
-# 	min_radius = 0
-# 	max_radius = search_area.side_length / 2
-# 	while min_radius + 1 < max_radius:
-# 		radius = (min_radius + max_radius) / 2
-# 		num_probes += 1
-# 		probe = Hypercube(drone, radius)
-# 		if hiker in probe:
-# 			num_responses += 1
-# 			min_radius = radius
-# 		else:
-# 			max_radius = radius
-
-# 	# step 3, find which face the hiker is on
-# 	for dim in range(search_area.dimension):
-# 		# move one unit in each direction
-# 		num_probes += 1
-# 		probe = Hypercube(drone.offset(1, dim), max_radius - 1)
-# 		if hiker in probe:
-# 			num_responses += 1
-# 			distance_traveled += 1
-# 			drone = drone.offset(1, dim)
-# 			break
-
-# 		num_probes += 1
-# 		probe = Hypercube(drone.offset(-1, dim), max_radius - 1)
-# 		if hiker in probe:
-# 			num_responses += 1
-# 			distance_traveled += 1
-# 			drone = drone.offset(-1, dim)
-# 			break
-
-# 		distance_traveled += 2
-
-# 	# step 4, we know which face the hiker is on. update the hypercube to have 
-
-# 	return SimulationResult(num_probes, distance_traveled, num_responses)
-
 def domino_2d_search(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
 	if search_area.dimension != 2:
 		raise ValueError("Domino 2D search only works in 2 dimensions.")
@@ -94,10 +61,10 @@ def domino_2d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 	
 	def domino_2d_reduction(area: Hypercube, empty_adjacent: Hypercube) -> SimulationResult:
+		nonlocal drone
+		
 		if area.side_length <= 1:
 			return SimulationResult(0, drone.distance_to(area.center), 0, area)
-		
-		nonlocal drone
 
 		candidates = list(area.orthants)
 		
@@ -133,7 +100,6 @@ def domino_2d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 
 		return SimulationResult(2 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
-
 	num_probes = 0
 	distance_traveled = 0
 	num_responses = 0
@@ -168,11 +134,11 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 
 	def domino_3d_reduction(area: Hypercube, empty_adjacent_3: tuple[Hypercube, Hypercube, Hypercube]) -> SimulationResult:
+		nonlocal drone
+
 		if area.side_length <= 1:
 			return SimulationResult(0, drone.distance_to(area.center), 0, area)
 		
-		nonlocal drone
-
 		candidates = list(area.orthants)
 		known_empty = list(empty_adjacent_3)
 
@@ -224,11 +190,11 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		return SimulationResult(3 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
 	def domino_2d_reduction(area: Hypercube, empty_adjacent: Hypercube) -> SimulationResult:
+		nonlocal drone
+
 		if area.side_length <= 1:
 			return SimulationResult(0, drone.distance_to(area.center), 0, area)
 		
-		nonlocal drone
-
 		candidates = list(area.orthants)
 		num_responses = 0
 
@@ -320,12 +286,102 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 
 	return SimulationResult(num_probes + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
-ALGORITHMS: list[KidnapperAlgorithm] = [simple_hypercube_search]
-ALGORITHMS_2D: list[KidnapperAlgorithm] = [simple_hypercube_search, domino_2d_search]
-ALGORITHMS_3D: list[KidnapperAlgorithm] = [simple_hypercube_search, domino_3d_search]
+def naive_central_binary_search(search_area: Hypercube, hiker: Point, drone: Point, hypercube_getter: HypercubeGetter  = ProjectionManager.InsetHypercube) -> SimulationResult:
+	# No optimizations!
+	# step 0, check if we are done
+	if search_area.side_length <= 1:
+		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 
-def get_algorithms(dims: int) -> list[KidnapperAlgorithm]:
+	pm = ProjectionManager(search_area.dimension)
+	current_radius = search_area.side_length / 2
+
+	distance_traveled = 0
+	num_probes = 0
+	num_responses = 0
+	
+	for dims in range(search_area.dimension, 0, -1):
+		new_search_area = Hypercube(Point.origin(dims), current_radius * 2)
+
+		if new_search_area.side_length <= 1:
+			true_area = hypercube_getter(pm, new_search_area.center, new_search_area.side_length)
+			return SimulationResult(num_probes, distance_traveled + drone.distance_to(true_area.center), num_responses, true_area)
+
+		# Step 1: Binary search in this dimension
+
+		min_radius = 0
+		max_radius = new_search_area.side_length / 2
+		empty_regions: list[Hypercube] = []
+		while min_radius + 1 < max_radius:
+			radius = (min_radius + max_radius) / 2
+			probe = hypercube_getter(pm, new_search_area.center, radius * 2)
+			
+			num_probes += 1
+			distance_traveled += drone.distance_to(probe.center)
+			drone = probe.center
+			if hiker in probe:
+				num_responses += 1
+				max_radius = radius
+			else:
+				min_radius = radius
+				empty_regions.append(probe)
+
+		current_radius = (min_radius + max_radius) / 2
+		offset_amount = min(current_radius, 1)
+		side_length = 2 * max(max_radius - offset_amount, 0.5)
+
+		# Step 2: Figure out which face the hiker is on
+		for dim in range(dims):
+			probe = hypercube_getter(pm, new_search_area.center.offset(offset_amount, dim), side_length)
+			
+			num_probes += 1
+			distance_traveled += drone.distance_to(probe.center)
+			drone = probe.center
+			
+			if hiker in probe:
+				num_responses += 1
+				pm.fix_coordinate(dim, current_radius)
+				break
+
+			# if last dimension, no need to check other side
+			if dim == dims - 1:
+				pm.fix_coordinate(dim, -current_radius)
+				break
+
+			probe = hypercube_getter(pm, new_search_area.center.offset(-offset_amount, dim), side_length)
+			
+			num_probes += 1
+			distance_traveled += drone.distance_to(probe.center)
+			drone = probe.center
+			if hiker in probe:
+				num_responses += 1
+				pm.fix_coordinate(dim, -current_radius)
+				break
+
+	guess = pm.Hypercube(Point.origin(0), 1)
+
+	return SimulationResult(num_probes, distance_traveled + drone.distance_to(guess.center), num_responses, guess)
+
+# def naive_central_binary_search_just_one(search_area: Hypercube, hiker: Point, drone: Point) -> SimulationResult:
+# 	return simple_hypercube_search(search_area, hiker, drone, ProjectionManager.Hypercube)
+
+AlgorithmPair = tuple[KidnapperAlgorithm, HikerGenerator]
+
+SHS: AlgorithmPair = (simple_hypercube_search, get_random_hiker_position)
+NCBS: AlgorithmPair = (lambda sa, h, d: naive_central_binary_search(sa, h, d, ProjectionManager.InsetHypercube), get_random_hiker_position_non_equal)
+# JO = Just One, only works if it is known that there is just one hiker
+NCBS_JO: AlgorithmPair = (lambda sa, h, d: naive_central_binary_search(sa, h, d, ProjectionManager.Hypercube), get_random_hiker_position_non_equal)
+D2S: AlgorithmPair = (domino_2d_search, get_random_hiker_position)
+D3S: AlgorithmPair = (domino_3d_search, get_random_hiker_position)
+
+ALGORITHMS: list[AlgorithmPair] = [SHS, NCBS, NCBS_JO]
+ALGORITHMS_1D: list[AlgorithmPair] = [SHS, NCBS]
+ALGORITHMS_2D: list[AlgorithmPair] = [SHS, NCBS, NCBS_JO, D2S]
+ALGORITHMS_3D: list[AlgorithmPair] = [SHS, NCBS, NCBS_JO, D3S]
+
+def get_algorithms(dims: int) -> list[AlgorithmPair]:
 	match dims:
+		case 1:
+			return ALGORITHMS_1D
 		case 2:
 			return ALGORITHMS_2D
 		case 3:

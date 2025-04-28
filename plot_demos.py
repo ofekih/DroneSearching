@@ -305,6 +305,11 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 				pm.fix_coordinate(dim, current_radius)
 				break
 
+			# if last dimension, no need to check other side
+			if dim == dims - 1:
+				pm.fix_coordinate(dim, -current_radius)
+				break
+
 			probe = pm.InsetHypercube(new_search_area.center.offset(-offset_amount, dim), side_length)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)

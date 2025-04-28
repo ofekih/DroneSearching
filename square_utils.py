@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Generator
+from typing import Callable, Generator
 
 CoordinateType = int | float
 
@@ -441,3 +441,5 @@ class ProjectionManager:
 		return (f"ProjectionManager(orig_dim={self._original_dimension}, "
 				f"current_dim={self.current_dimension}, "
 				f"fixed={{{fixed_str}}})")
+
+HypercubeGetter = Callable[[ProjectionManager, Point, CoordinateType], Hypercube]

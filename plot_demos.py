@@ -1,3 +1,4 @@
+import itertools
 from square_plot import SquarePlotter
 from square_utils import Hypercube, Point, ProjectionManager
 
@@ -258,7 +259,7 @@ def plot_domino_3d_search(plotter: SquarePlotter, search_area: Hypercube, hiker:
 		else:
 			plot_domino_2d_reduction(correct_orthant, adj_empty_orthants[0])
 
-def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, hiker: Point, drone: Point):
+def plot_naive_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, hiker: Point, drone: Point):
 	# No optimizations!
 	# step 0, check if we are done
 	if search_area.side_length <= 1:
@@ -325,13 +326,109 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 	plotter.plot_search_state(search_area, hiker, drone, probe=pm.Hypercube(Point.origin(0), 1))
 	plotter.show(block=False)
 
+def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, hiker: Point, drone: Point):
+	# No optimizations!
+	# step 0, check if we are done
+	if search_area.side_length <= 1:
+		return
+
+	pm = ProjectionManager(search_area.dimension)
+	current_radius = search_area.side_length / 2
+
+	while pm.current_dimension > 0:
+		print('Current dimension:', pm.current_dimension)
+		new_search_area = Hypercube(Point.origin(pm.current_dimension), current_radius * 2)
+
+		# Step 1: Binary search in this dimension
+
+		min_radius = 0
+		max_radius = new_search_area.side_length / 2
+		empty_regions: list[Hypercube] = []
+		while min_radius + 1 < max_radius:
+			radius = (min_radius + max_radius) / 2
+			probe = pm.InsetHypercube(new_search_area.center, radius * 2)
+			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+			plotter.show(block=False)
+			if hiker in probe:
+				max_radius = radius
+			else:
+				min_radius = radius
+				empty_regions.append(probe)
+
+		plotter.plot_search_state(search_area, hiker, drone, empty_regions)
+		plotter.show(block=False)
+
+		if min_radius < 0.5:
+			# probe with radius 0.5 and increase min_radius
+			probe = pm.InsetHypercube(new_search_area.center, 1)
+			
+			drone = probe.center
+			if hiker in probe:
+				print('Found hiker!', probe)
+				plotter.plot_search_state(search_area, hiker, drone, probe=probe)
+				plotter.show(block=False)
+
+				return
+			else:
+				min_radius = 0.5
+
+		current_radius = (min_radius + max_radius) / 2
+		offset_amount = max_radius - min_radius
+		side_length = 2 * min_radius
+
+		positions = tuple(range(pm.current_dimension))
+		found_hiker = False
+		for num_dims in range(1, pm.current_dimension + 1):
+			for dims_to_check in itertools.combinations(positions, num_dims):
+				# each one can be either 1 or -1
+				for signs in itertools.product((-1, 1), repeat=num_dims):
+					probe_center = new_search_area.center
+					for dim, sign in zip(dims_to_check, signs):
+						probe_center = probe_center.offset(sign * offset_amount, dim)
+					probe = pm.InsetHypercube(probe_center, side_length)
+
+					drone = probe.center
+
+					plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+					plotter.show(block=False)
+					
+					if hiker in probe:
+						print('Found hiker!', probe)
+						if probe.side_length <= 1:
+							plotter.plot_search_state(search_area, hiker, drone, probe=probe)
+							plotter.show(block=False)
+
+							print('Found hiker!')
+
+							return
+
+						pm.fix_coordinates(zip(dims_to_check, (sign * current_radius for sign in signs)))
+						found_hiker = True
+						break
+
+				if found_hiker:
+					break
+
+			if found_hiker:
+				break
+
+	guess = pm.Hypercube(Point.origin(0), 1)
+
+	if not hiker in guess:
+		print('Failed to find hiker!')
+	else:
+		print('Found hiker!')
+
+	plotter.plot_search_state(search_area, hiker, drone, probe=pm.Hypercube(Point.origin(0), 1))
+	plotter.show(block=False)
+
 
 if __name__ == "__main__":
 	plotter = SquarePlotter()
 
 	# Central binary search example
 	# 3D
-	plot_central_binary_search(plotter, Hypercube(Point.origin(3), 16), Point((2.853313899411406, 4.678879071104282, -0.7464353935619741)), Point.origin(3))
+	plot_central_binary_search(plotter, Hypercube(Point.origin(3), 16), Point((-3.2992642252251754, 0.7909676092801083, 0.9790947724952259)), Point.origin(3))
 	# 2D
 	# plot_central_binary_search(plotter, Hypercube(Point.origin(2), 32), Point((13, 4)), Point.origin(2))
 

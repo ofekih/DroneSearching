@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Callable, Generator
+from typing import Callable, Generator, Iterable
 
 CoordinateType = int | float
 
@@ -364,6 +364,20 @@ class ProjectionManager:
 		original_dim_index = self._variable_dimension_indices[dim_index]
 		self._fixed_dimensions[original_dim_index] = float(value)
 		self._update_variable_dimensions()  # Update the list of variable dims
+
+	def fix_coordinates(self, values: Iterable[tuple[int, CoordinateType]]):
+		"""
+		Fixes multiple dimensions to specific values, reducing the current projection dimension by the number of fixed dimensions.
+
+		Args:
+			values: An iterable of tuples, where each tuple contains the index of the variable dimension to fix
+					and the value to fix it at.
+
+		Raises:
+			ValueError: If any dimension index is invalid.
+		"""
+		for dim_index, value in sorted(values, key=lambda x: x[0], reverse=True):
+			self.fix_coordinate(dim_index, value)
 
 	def Point(self, p: Point) -> Point:
 		"""

@@ -44,7 +44,7 @@ def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, result
 # set random seed
 # random.seed(0)
 
-def verify_algorithms(min_dim: int = 1, max_dim: int = 5, num_iterations: int = 1000, n: CoordinateType = 2 ** 10):
+def verify_algorithms(min_dim: int = 1, max_dim: int = 5, num_iterations: int = 1000, n: CoordinateType = 2 ** 10, debug: bool = False):
 	for dims in range(min_dim, max_dim + 1):
 		search_area = Hypercube(Point(tuple(0 for _ in range(dims))), side_length=n / 2)
 		drone = search_area.center
@@ -53,9 +53,10 @@ def verify_algorithms(min_dim: int = 1, max_dim: int = 5, num_iterations: int = 
 			for _ in range(num_iterations):
 				for algorithm, generator in get_algorithms(dims):
 					hiker = generator(search_area)
-					# print(f'{algorithm.__name__} searching for hiker at {hiker}')
-					# print(f'  Distance: {drone.distance_to(hiker)}')
-					# print(f'  Search area: {search_area}')
+					if debug:
+						print(f'{algorithm.__name__} searching for hiker at {hiker}')
+						print(f'  Distance: {drone.distance_to(hiker)}')
+						print(f'  Search area: {search_area}')
 					result = algorithm(search_area, hiker, drone)
 					assert hiker in result.area, f'{algorithm.__name__} failed to find hiker in {dims} dimensions'
 					assert result.area.side_length <= 1, f'{algorithm.__name__} final search area too large in {dims} dimensions'
@@ -241,8 +242,8 @@ def run_simulations(n: CoordinateType = 2**20, min_dim: int = 1, max_dim: int = 
 
 if __name__ == '__main__':
 	# Uncomment one of these examples to run:
-	verify_algorithms()
-	run_simulations()
+	verify_algorithms(debug=False)
+	# run_simulations()
 
 	# Run a single batch of simulations for a specific dimension
 	# run_simulation_batch(n=2**20, dims=3)

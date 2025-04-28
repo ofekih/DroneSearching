@@ -1,5 +1,5 @@
 from square_plot import SquarePlotter
-from square_utils import Hypercube, Point
+from square_utils import Hypercube, Point, ProjectionManager
 
 
 def plot_orthants(dimensions: int = 3):
@@ -258,8 +258,71 @@ def plot_domino_3d_search(plotter: SquarePlotter, search_area: Hypercube, hiker:
 		else:
 			plot_domino_2d_reduction(correct_orthant, adj_empty_orthants[0])
 
+def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, hiker: Point, drone: Point):
+	# No optimizations!
+	# step 0, check if we are done
+	if search_area.side_length <= 1:
+		return
+
+	pm = ProjectionManager(search_area.dimension)
+	current_radius = search_area.side_length
+	
+	for dims in range(search_area.dimension, 0, -1):
+		if current_radius <= 1:
+			return
+
+		new_search_area = Hypercube(Point.origin(dims), current_radius)
+
+		# Step 1: Binary search in this dimension
+
+		min_radius = 0
+		max_radius = new_search_area.side_length
+		empty_regions: list[Hypercube] = []
+		while min_radius + 1 < max_radius:
+			radius = (min_radius + max_radius) / 2
+			probe = pm.Hypercube(new_search_area.center, radius)
+			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+			plotter.show(block=False)
+			if hiker in probe:
+				max_radius = radius
+			else:
+				min_radius = radius
+				empty_regions.append(probe)
+
+		plotter.plot_search_state(search_area, hiker, drone, empty_regions)
+		plotter.show(block=False)
+
+		# Step 2: Figure out which face the hiker is on
+		for dim in range(dims):
+			# move one unit in each direction
+			probe = pm.Hypercube(new_search_area.center.offset(2, dim), max_radius - 2)
+			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+			plotter.show(block=False)
+			if hiker in probe:
+				pm.fix_coordinate(dim, max_radius / 2)
+				break
+
+			probe = pm.Hypercube(new_search_area.center.offset(-2, dim), max_radius - 2)
+			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+			plotter.show(block=False)
+			if hiker in probe:
+				pm.fix_coordinate(dim, -max_radius / 2)
+				break
+
+		current_radius = max_radius
+
+	plotter.plot_search_state(search_area, hiker, drone, probe=pm.Hypercube(Point.origin(0), 1))
+	plotter.show(block=False)
+
+
 if __name__ == "__main__":
 	plotter = SquarePlotter()
+
+	# Central binary search example
+	# 3D
+	# plot_central_binary_search(plotter, Hypercube(Point.origin(3), 8), Point((2.853313899411406, 3.678879071104282, -0.7464353935619741)), Point.origin(3))
+	# 2D
+	plot_central_binary_search(plotter, Hypercube(Point.origin(2), 32), Point((13, 4)), Point.origin(2))
 
 	# Uncomment one of the examples below to run it
 
@@ -267,7 +330,7 @@ if __name__ == "__main__":
 	# plot_domino_2d_search(plotter, Hypercube(Point.origin(2), 32), Point((13, 4)), Point.origin(2))
 
 	# 3D domino search example
-	plot_domino_3d_search(plotter, Hypercube(Point.origin(3), 8), Point((2.853313899411406, 3.678879071104282, -0.7464353935619741)), Point.origin(3))
+	# plot_domino_3d_search(plotter, Hypercube(Point.origin(3), 16), Point((-5, -5, 5)), Point.origin(3))
 
 	# Orthant visualization examples
 	# plot_orthants(1)

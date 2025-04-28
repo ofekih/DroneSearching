@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import math
 from typing import Generator
 
-type CoordinateType = int | float
+CoordinateType = int | float
 
 @dataclass(frozen=True)
 class Point:
@@ -14,15 +14,14 @@ class Point:
 	Attributes:
 		coordinates: A tuple containing the coordinates of the point.
 					 The length of the tuple determines the dimension 'd'.
-					 Assumes d >= 1.
+					 Allows d >= 0.
 	"""
 	coordinates: tuple[CoordinateType, ...]
 
 	def __post_init__(self):
-		"""Validates that at least one coordinate is provided."""
-		# Keep this check as it ensures the fundamental structure (d>=1)
-		if not self.coordinates:
-			raise ValueError("Point must have at least one coordinate (d >= 1).")
+		"""Validates the coordinates."""
+		# No validation needed for empty tuple (0-d point)
+		pass
 
 	@property
 	def dimension(self) -> int:
@@ -31,7 +30,6 @@ class Point:
 
 	def __getitem__(self, index: int) -> CoordinateType:
 		"""Allows accessing coordinates by index."""
-		# Keep bounds check for valid indexing
 		if not 0 <= index < self.dimension:
 			raise IndexError(f"Index {index} out of bounds for dimension {self.dimension}.")
 		return self.coordinates[index]
@@ -62,7 +60,8 @@ class Point:
 		Returns a new Point with the specified offset applied to the given dimension.
 		"""
 		new_coords = list(self.coordinates)
-		new_coords[dim] += offset
+		if 0 <= dim < self.dimension:
+			new_coords[dim] += offset
 		return Point(tuple(new_coords))
 
 	def interpolate(self, other: Point, t: float) -> Point:
@@ -117,34 +116,34 @@ class Point:
 		return Point(tuple(0 for _ in range(dimensions)))
 
 def generate_gray_codes(n: int) -> Generator[tuple[int, ...], None, None]:
-    """
-    Generates binary tuples (using 0s and 1s) of length 'n'
-    following the standard reflected binary Gray code sequence.
+	"""
+	Generates binary tuples (using 0s and 1s) of length 'n'
+	following the standard reflected binary Gray code sequence.
 
-    Example n=3: (0,0,0), (0,0,1), (0,1,1), (0,1,0), (1,1,0), (1,1,1), (1,0,1), (1,0,0)
-    """
-    if n <= 0:
-        # Base case for recursion or invalid input
-        if n == 0:
-             yield () # Yield empty tuple for 0 dimension
-        return
+	Example n=3: (0,0,0), (0,0,1), (0,1,1), (0,1,0), (1,1,0), (1,1,1), (1,0,1), (1,0,0)
+	"""
+	if n <= 0:
+		# Base case for recursion or invalid input
+		if n == 0:
+			yield () # Yield empty tuple for 0 dimension
+		return
 
-    if n == 1:
-        yield (0,)
-        yield (1,)
-        return
+	if n == 1:
+		yield (0,)
+		yield (1,)
+		return
 
-    # Recursively generate Gray code for n-1 bits
-    # We need to store the result to iterate over it twice
-    prev_gray_codes = list(generate_gray_codes(n - 1))
+	# Recursively generate Gray code for n-1 bits
+	# We need to store the result to iterate over it twice
+	prev_gray_codes = list(generate_gray_codes(n - 1))
 
-    # Yield first half: prepend 0 to G(n-1)
-    for code in prev_gray_codes:
-        yield (0,) + code
+	# Yield first half: prepend 0 to G(n-1)
+	for code in prev_gray_codes:
+		yield (0,) + code
 
-    # Yield second half: prepend 1 to reversed G(n-1)
-    for code in reversed(prev_gray_codes):
-        yield (1,) + code
+	# Yield second half: prepend 1 to reversed G(n-1)
+	for code in reversed(prev_gray_codes):
+		yield (1,) + code
 
 @dataclass(frozen=True)
 class Hypercube:
@@ -165,8 +164,8 @@ class Hypercube:
 	def __post_init__(self):
 		"""Validates the hypercube definition."""
 		# Dimension check is implicitly handled by Point validation for center
-		if self.dimension < 1:
-			raise ValueError("Hypercube dimension must be at least 1.")
+		if self.dimension < 0:
+			raise ValueError("Hypercube dimension must be non-negative.")
 
 		# Validate side length
 		if self.side_length < 0:
@@ -180,6 +179,8 @@ class Hypercube:
 	@property
 	def min_corner(self) -> Point:
 		"""Calculates the corner with the minimum coordinates."""
+		if self.dimension == 0:
+			return self.center
 		half_side = self.side_length / 2.0
 		min_coords = tuple(c - half_side for c in self.center.coordinates)
 		return Point(coordinates=min_coords)
@@ -187,6 +188,8 @@ class Hypercube:
 	@property
 	def max_corner(self) -> Point:
 		"""Calculates the corner with the maximum coordinates."""
+		if self.dimension == 0:
+			return self.center
 		half_side = self.side_length / 2.0
 		max_coords = tuple(c + half_side for c in self.center.coordinates)
 		return Point(coordinates=max_coords)
@@ -208,6 +211,8 @@ class Hypercube:
 		Returns:
 			True if the point is contained within the hypercube, False otherwise.
 		"""
+		if self.dimension == 0:
+			return point == self.center
 		half_side = self.side_length / 2
 		for i in range(self.dimension):
 			min_bound = self.center.coordinates[i] - half_side
@@ -227,6 +232,8 @@ class Hypercube:
 		Returns:
 			True if the other hypercube is contained within this hypercube, False otherwise.
 		"""
+		if self.dimension == 0:
+			return other == self
 		return self.contains_point(other.min_corner) and self.contains_point(other.max_corner)
 	
 	def __contains__(self, item: Point | Hypercube) -> bool:
@@ -245,6 +252,8 @@ class Hypercube:
 		Returns a new Hypercube representing the orthant defined by the given code.
 		The code is a tuple of 0s and 1s, where each element specifies which half of the hypercube to take.
 		"""
+		if self.dimension == 0:
+			return self
 		if len(code) != self.dimension:
 			raise ValueError("Code length must match the dimension of the hypercube.")
 		
@@ -256,14 +265,19 @@ class Hypercube:
 		"""
 		Generates all orthants of the hypercube.
 		"""
-		for code in generate_gray_codes(self.dimension):
-			yield self.orthant_from_code(code)
+		if self.dimension == 0:
+			yield self
+		else:
+			for code in generate_gray_codes(self.dimension):
+				yield self.orthant_from_code(code)
 
 	@property
 	def neighbors(self) -> Generator[Hypercube, None, None]:
 		"""
 		Generates all neighbors of the hypercube.
 		"""
+		if self.dimension == 0:
+			return
 		for dim in range(self.dimension):
 			for offset in (-1, 1):
 				new_center = self.center.offset(offset * self.side_length, dim)
@@ -274,3 +288,141 @@ class Hypercube:
 		if not isinstance(other, Hypercube):
 			return False
 		return self.center == other.center and math.isclose(self.side_length, other.side_length)
+
+class ProjectionManager:
+	"""
+	Manages coordinate transformations from a projected lower-dimensional space
+	back to an original higher-dimensional space as dimensions are fixed.
+
+	Allows creating points and hypercubes using coordinates relative to the
+	current projection dimension, and automatically maps them back to the
+	original d-dimensional space.
+	"""
+	def __init__(self, original_dimension: int):
+		"""
+		Initializes the ProjectionManager.
+
+		Args:
+			original_dimension: The starting number of dimensions (d).
+		"""
+		if original_dimension < 0:
+			raise ValueError("original_dimension must be a non-negative integer.")
+
+		self._original_dimension: int = original_dimension
+		# Stores fixed dimensions: {original_index: fixed_value}
+		self._fixed_dimensions: dict[int, float] = {}
+		# Stores the indices of dimensions that are still variable
+		self._update_variable_dimensions()
+
+	def _update_variable_dimensions(self):
+		"""Helper method to recalculate the variable dimension indices."""
+		fixed_indices = set(self._fixed_dimensions.keys())
+		self._variable_dimension_indices: list[int] = sorted([
+			i for i in range(self._original_dimension) if i not in fixed_indices
+		])
+
+	@property
+	def original_dimension(self) -> int:
+		"""Returns the initial dimension d."""
+		return self._original_dimension
+
+	@property
+	def current_dimension(self) -> int:
+		"""Returns the dimension of the current projection space."""
+		return len(self._variable_dimension_indices)
+
+	@property
+	def fixed_dimensions(self) -> dict[int, float]:
+		"""Returns a copy of the fixed dimensions map."""
+		return self._fixed_dimensions.copy()
+
+	@property
+	def variable_dimension_indices(self) -> list[int]:
+		"""Returns a copy of the list of variable dimension indices."""
+		return self._variable_dimension_indices.copy()
+
+	def fix_coordinate(self, dim_index: int, value: CoordinateType):
+		"""
+		Fixes a dimension to a specific value, reducing the current projection dimension by one.
+
+		Args:
+			dim_index: The index of the variable dimension to fix (0-indexed in the current projection space).
+			value: The value to fix the coordinate at.
+
+		Raises:
+			ValueError: If the dimension index is invalid.
+		"""
+		if not (0 <= dim_index < self.current_dimension):
+			raise ValueError(f"dim_index {dim_index} is out of bounds for current dimension {self.current_dimension}.")
+
+		original_dim_index = self._variable_dimension_indices[dim_index]
+		self._fixed_dimensions[original_dim_index] = float(value)
+		self._update_variable_dimensions()  # Update the list of variable dims
+
+	def Point(self, p: Point) -> Point:
+		"""
+		Creates a Point in the original d-dimensional space from coordinates
+		provided in the current projection space.
+
+		Args:
+			p: A Point object in the *current* projection dimension.
+
+		Returns:
+			A Point object with self.original_dimension coordinates.
+
+		Raises:
+			ValueError: If the number of provided coordinates does not match
+						the current projection dimension.
+		"""
+		coords = p.coordinates
+
+		if len(coords) != self.current_dimension:
+			raise ValueError(f"Expected {self.current_dimension} coordinates for the current projection "
+							 f"dimension, but received {len(coords)}.")
+
+		# Initialize coordinates for the original d-dimensional space
+		origin_coords = [0.0] * self._original_dimension
+
+		# Fill in fixed coordinates
+		for index, value in self._fixed_dimensions.items():
+			origin_coords[index] = value
+
+		# Fill in variable coordinates from input *coords
+		for i, var_coord in enumerate(coords):
+			original_index = self._variable_dimension_indices[i]
+			origin_coords[original_index] = float(var_coord)
+
+		return Point(tuple(origin_coords))
+
+	def Hypercube(self, center: Point, side_length: CoordinateType) -> Hypercube:
+		"""
+		Creates a Hypercube in the original d-dimensional space from a center point
+		defined in the current projection space and a side length.
+
+		The center of the resulting d-dimensional hypercube will have coordinates matching
+		the input center_proj for the variable dimensions and the fixed values for the
+		fixed dimensions.
+
+		Args:
+			center_proj: The center point of the hypercube in the *current* projection space.
+						 Its dimension must match self.current_dimension.
+			side_length: The side length of the hypercube.
+
+		Returns:
+			A Hypercube object in the original d-dimensional space.
+
+		Raises:
+			ValueError: If the dimension of center_proj does not match the current
+						projection dimension.
+			ValueError: If side_length is negative.
+		"""
+		# Create the Hypercube in the original dimension
+		return Hypercube(center=self.Point(center), side_length=side_length)
+
+	def __repr__(self) -> str:
+		"""Returns a string representation of the ProjectionManager's state."""
+		fixed_str = ", ".join(f"{k}={v:.4f}".rstrip('0').rstrip('.')
+							  for k, v in sorted(self._fixed_dimensions.items()))
+		return (f"ProjectionManager(orig_dim={self._original_dimension}, "
+				f"current_dim={self.current_dimension}, "
+				f"fixed={{{fixed_str}}})")

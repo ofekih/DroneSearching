@@ -265,22 +265,22 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 		return
 
 	pm = ProjectionManager(search_area.dimension)
-	current_radius = search_area.side_length
+	current_radius = search_area.side_length / 2
 	
 	for dims in range(search_area.dimension, 0, -1):
-		if current_radius <= 1:
+		if current_radius <= 0.5:
 			return
 
-		new_search_area = Hypercube(Point.origin(dims), current_radius)
+		new_search_area = Hypercube(Point.origin(dims), current_radius * 2)
 
 		# Step 1: Binary search in this dimension
 
 		min_radius = 0
-		max_radius = new_search_area.side_length
+		max_radius = new_search_area.side_length / 2
 		empty_regions: list[Hypercube] = []
 		while min_radius + 1 < max_radius:
 			radius = (min_radius + max_radius) / 2
-			probe = pm.InsetHypercube(new_search_area.center, radius)
+			probe = pm.Hypercube(new_search_area.center, radius * 2)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)
 			if hiker in probe:
@@ -292,28 +292,30 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 		plotter.plot_search_state(search_area, hiker, drone, empty_regions)
 		plotter.show(block=False)
 
-		if max_radius <= 1:
-			break
-
-		offset_amount = min((min_radius + 1) / 2, 2)
+		current_radius = (min_radius + max_radius) / 2
+		offset_amount = min(current_radius, 1)
+		side_length = 2 * max(max_radius - offset_amount, 0.5)
 
 		# Step 2: Figure out which face the hiker is on
 		for dim in range(dims):
-			probe = pm.InsetHypercube(new_search_area.center.offset(offset_amount, dim), max(max_radius - offset_amount, 1))
+			probe = pm.Hypercube(new_search_area.center.offset(offset_amount, dim), side_length)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)
 			if hiker in probe:
-				pm.fix_coordinate(dim, max_radius / 2)
+				pm.fix_coordinate(dim, current_radius)
 				break
 
-			probe = pm.InsetHypercube(new_search_area.center.offset(-offset_amount, dim), max(max_radius - offset_amount, 1))
+			probe = pm.Hypercube(new_search_area.center.offset(-offset_amount, dim), side_length)
 			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 			plotter.show(block=False)
 			if hiker in probe:
-				pm.fix_coordinate(dim, -max_radius / 2)
+				pm.fix_coordinate(dim, -current_radius)
 				break
 
-		current_radius = max_radius
+	guess = pm.Hypercube(Point.origin(0), 1)
+
+	if not hiker in guess:
+		print('Failed to find hiker!')
 
 	plotter.plot_search_state(search_area, hiker, drone, probe=pm.Hypercube(Point.origin(0), 1))
 	plotter.show(block=False)

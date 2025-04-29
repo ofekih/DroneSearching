@@ -72,6 +72,11 @@ def aggregate_square_data(output_dir=None):
                         # Calculate D / hiker_distance
                         d_hiker_ratio = D / hiker_distance if hiker_distance > 0 else 0
 
+                        # Check if we have a hiker_algorithm column
+                        hiker_algorithm = "random"  # Default for backward compatibility
+                        if len(row) >= 8:  # If we have the hiker_algorithm column
+                            hiker_algorithm = row[7]
+
                         # Add to data list
                         all_data.append({
                             'algorithm': algorithm,
@@ -81,7 +86,8 @@ def aggregate_square_data(output_dir=None):
                             'P': P,
                             'D': D,
                             'num_responses': num_responses,
-                            'D_hiker_ratio': d_hiker_ratio
+                            'D_hiker_ratio': d_hiker_ratio,
+                            'hiker_algorithm': hiker_algorithm
                         })
         except Exception as e:
             print(f"Error processing file {file_path}: {e}")
@@ -93,8 +99,8 @@ def aggregate_square_data(output_dir=None):
     # Convert to DataFrame
     df = pd.DataFrame(all_data)
 
-    # Group by algorithm, dims, and n
-    grouped = df.groupby(['algorithm', 'dims', 'n'])
+    # Group by algorithm, dims, n, and hiker_algorithm
+    grouped = df.groupby(['algorithm', 'dims', 'n', 'hiker_algorithm'])
 
     # Calculate statistics for each group
     stats = grouped.agg({
@@ -151,7 +157,7 @@ def aggregate_square_data(output_dir=None):
 
         # Create a more readable comparison table
         comparison_cols = [
-            'algorithm', 'num_simulations',
+            'algorithm', 'hiker_algorithm', 'num_simulations',
             'P_mean', 'P_std',
             'D_mean', 'D_std',
             'num_responses_mean', 'num_responses_std',

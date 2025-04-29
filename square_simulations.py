@@ -2,12 +2,16 @@ import random, csv, os, time
 from pathlib import Path
 import multiprocessing
 from collections import defaultdict
-from typing import Any
+from typing import Any, Callable
 from tqdm.auto import tqdm
 
 from square_utils import CoordinateType, Point, Hypercube
 
-from square_algorithms import SimulationResult, get_algorithms, get_random_hiker_position
+from square_algorithms import SimulationResult, get_algorithms, get_random_hiker_position, get_random_hiker_position_non_equal
+
+# Define a type for hiker position generators
+HikerGenerator = Callable[[Hypercube], Point]
+HikerAlgorithmType = str  # Using str instead of Literal to avoid type issues
 
 RAW_DATA_DIRECTORY = Path('raw-data')
 RAW_DATA_DIRECTORY.mkdir(exist_ok=True)
@@ -16,7 +20,7 @@ DATA_FILE_INDEX = 0
 
 DATA_FILE = RAW_DATA_DIRECTORY / f'simulations_{DATA_FILE_INDEX}.csv'
 
-def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, results: list[tuple[CoordinateType, SimulationResult]], file_path: Path | None = None):
+def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, results: list[tuple[CoordinateType, SimulationResult, HikerAlgorithmType]], file_path: Path | None = None):
 	"""
 	Save simulation results to a CSV file.
 
@@ -24,7 +28,7 @@ def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, result
 		algorithm: Name of the algorithm used
 		dims: Number of dimensions
 		n: Size of the search area
-		results: list of (hiker_distance, SimulationResult) tuples
+		results: list of (hiker_distance, SimulationResult, hiker_algorithm) tuples
 		file_path: Optional custom file path to save results to
 	"""
 	output_file = file_path if file_path is not None else DATA_FILE
@@ -33,13 +37,13 @@ def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, result
 	if not output_file.exists():
 		with output_file.open('w') as f:
 			writer = csv.writer(f)
-			writer.writerow(['algorithm', 'dims', 'n', 'hiker_distance', 'P', 'D', 'num_responses'])
+			writer.writerow(['algorithm', 'dims', 'n', 'hiker_distance', 'P', 'D', 'num_responses', 'hiker_algorithm'])
 
 	# Append results to file
 	with output_file.open('a') as f:
 		writer = csv.writer(f)
-		writer.writerows([(algorithm, dims, n, hiker_distance, result.P, result.D, result.num_responses)
-						  for hiker_distance, result in results])
+		writer.writerows([(algorithm, dims, n, hiker_distance, result.P, result.D, result.num_responses, hiker_algorithm)
+						  for hiker_distance, result, hiker_algorithm in results])
 
 # set random seed
 # random.seed(0)
@@ -49,23 +53,32 @@ def verify_algorithms(min_dim: int = 1, max_dim: int = 5, num_iterations: int = 
 		search_area = Hypercube(Point(tuple(0 for _ in range(dims))), side_length=n / 2)
 		drone = search_area.center
 
-		with tqdm(total=num_iterations * len(get_algorithms(dims)), desc=f"Verifying {dims}D") as progress_bar:
-			for hiker in [get_random_hiker_position(search_area) for _ in range(num_iterations)]:
-				for algorithm in get_algorithms(dims):
-					if debug:
-						print(f'{algorithm.__name__} searching for hiker at {hiker}')
-						print(f'  Distance: {drone.distance_to(hiker)}')
-						print(f'  Search area: {search_area}')
-					result = algorithm(search_area, hiker, drone)
-					assert hiker in result.area, f'{algorithm.__name__} failed to find hiker in {dims} dimensions'
-					assert result.area.side_length <= 1, f'{algorithm.__name__} final search area too large in {dims} dimensions'
-					progress_bar.update(1)
+		# Test with both hiker position generators
+		hiker_generators = [
+			(get_random_hiker_position, "random"),
+			(get_random_hiker_position_non_equal, "non_equal")
+		]
+
+		total_iterations = num_iterations * len(get_algorithms(dims)) * len(hiker_generators)
+		with tqdm(total=total_iterations, desc=f"Verifying {dims}D") as progress_bar:
+			for hiker_gen, hiker_type in hiker_generators:
+				for hiker in [hiker_gen(search_area) for _ in range(num_iterations)]:
+					for algorithm in get_algorithms(dims):
+						if debug:
+							print(f'{algorithm.__name__} searching for hiker at {hiker} (type: {hiker_type})')
+							print(f'  Distance: {drone.distance_to(hiker)}')
+							print(f'  Search area: {search_area}')
+						result = algorithm(search_area, hiker, drone)
+						assert hiker in result.area, f'{algorithm.__name__} failed to find hiker in {dims} dimensions with {hiker_type} hiker'
+						assert result.area.side_length <= 1, f'{algorithm.__name__} final search area too large in {dims} dimensions with {hiker_type} hiker'
+						progress_bar.update(1)
 
 	print('All algorithms verified')
 
 def run_simulation_batch(n: CoordinateType, dims: int, num_iterations: int = 2 ** 6, file_path: Path | None = None):
 	"""
 	Run a batch of simulations for all algorithms in the given dimensions.
+	For each batch, generates hiker positions using both get_random_hiker_position and get_random_hiker_position_non_equal.
 
 	Args:
 		n: Size of the search area
@@ -76,12 +89,26 @@ def run_simulation_batch(n: CoordinateType, dims: int, num_iterations: int = 2 *
 	search_area = Hypercube(Point(tuple(0 for _ in range(dims))), side_length=n / 2)
 	drone = search_area.center
 
-	hiker_positions = [get_random_hiker_position(search_area) for _ in range(num_iterations)]
-	hiker_distances = [drone.distance_to(hiker) for hiker in hiker_positions]
+	# Generate hiker positions using both methods
+	random_hiker_positions = [get_random_hiker_position(search_area) for _ in range(num_iterations)]
+	random_hiker_distances = [drone.distance_to(hiker) for hiker in random_hiker_positions]
 
+	non_equal_hiker_positions = [get_random_hiker_position_non_equal(search_area) for _ in range(num_iterations)]
+	non_equal_hiker_distances = [drone.distance_to(hiker) for hiker in non_equal_hiker_positions]
+
+	# Run simulations for each algorithm with both types of hiker positions
 	for algorithm in get_algorithms(dims):
-		results = [algorithm(search_area, hiker, drone) for hiker in hiker_positions]
-		save_simulation_results(algorithm.__name__, dims, n, list(zip(hiker_distances, results)), file_path)
+		# Run with random hiker positions
+		random_results = [algorithm(search_area, hiker, drone) for hiker in random_hiker_positions]
+		random_data = list(zip(random_hiker_distances, random_results, ["random"] * num_iterations))
+
+		# Run with non-equal hiker positions
+		non_equal_results = [algorithm(search_area, hiker, drone) for hiker in non_equal_hiker_positions]
+		non_equal_data = list(zip(non_equal_hiker_distances, non_equal_results, ["non_equal"] * num_iterations))
+
+		# Combine results and save
+		all_results = random_data + non_equal_data
+		save_simulation_results(algorithm.__name__, dims, n, all_results, file_path)
 
 def run_worker_process(task: tuple[CoordinateType, int, int, int]) -> tuple[int, int, float, int]:
 	"""
@@ -244,7 +271,7 @@ if __name__ == '__main__':
 	# Uncomment one of these examples to run:
 	verify_algorithms()
 	# verify_algorithms(n=8,debug=True)
-	# run_simulations()
+	run_simulations()
 
 	# Run a single batch of simulations for a specific dimension
 	# run_simulation_batch(n=2**20, dims=3)

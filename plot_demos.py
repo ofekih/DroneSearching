@@ -1,4 +1,5 @@
 import itertools
+from typing import Literal
 from square_plot import SquarePlotter
 from square_utils import Hypercube, Point, ProjectionManager
 
@@ -359,12 +360,15 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 		plotter.show(block=False)
 
 		if min_radius < 0.5:
+			print('Min radius too small')
 			# probe with radius 0.5 and increase min_radius
 			probe = pm.InsetHypercube(new_search_area.center, 1)
+			plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+			plotter.show(block=False)
 			
 			drone = probe.center
 			if hiker in probe:
-				print('Found hiker!', probe)
+				print('Found hiker A!')
 				plotter.plot_search_state(search_area, hiker, drone, probe=probe)
 				plotter.show(block=False)
 
@@ -376,34 +380,83 @@ def plot_central_binary_search(plotter: SquarePlotter, search_area: Hypercube, h
 		offset_amount = max_radius - min_radius
 		side_length = 2 * min_radius
 
+		# First, check if all the dimensions are positive
+		probe_center = new_search_area.center
+		for dim in range(pm.current_dimension):
+			probe_center = probe_center.offset(offset_amount / 2, dim)
+		
+		probe = pm.InsetHypercube(probe_center, side_length + offset_amount)
+		drone = probe.center
+
+		plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
+		plotter.show(block=False)
+
+		all_positive = hiker in probe
+
 		positions = tuple(range(pm.current_dimension))
 		found_hiker = False
 		for num_dims in range(1, pm.current_dimension + 1):
+			sign_combos: list[tuple[Literal[-1] | Literal[1], ...]] = []
+			for signs in itertools.product((-1, 1), repeat=num_dims):
+				if all_positive == all(s == 1 for s in signs):
+					sign_combos.append(signs)
+
 			for dims_to_check in itertools.combinations(positions, num_dims):
 				# each one can be either 1 or -1
-				for signs in itertools.product((-1, 1), repeat=num_dims):
+				for signs in sign_combos:
 					probe_center = new_search_area.center
 					for dim, sign in zip(dims_to_check, signs):
 						probe_center = probe_center.offset(sign * offset_amount, dim)
 					probe = pm.InsetHypercube(probe_center, side_length)
 
+					if pm.current_dimension == 2 and dims_to_check == (0,) and not all_positive:
+						# must perform special probe
+						probe_center = new_search_area.center.offset(-offset_amount / 2, 0).offset(offset_amount / 2, 1)
+						probe = pm.InsetHypercube(probe_center, side_length + offset_amount)
+
 					drone = probe.center
+
+					# check if this is the very last probe. if so, the hiker must be here, no need to actually probe
+					if (num_dims == len(positions) and signs == sign_combos[-1]) \
+						or (pm.current_dimension == 2 and dims_to_check == (1,)):
+						print('Skipped final probe!', pm.current_dimension, dims_to_check)
+						pm.fix_coordinates(zip(dims_to_check, (sign * current_radius for sign in signs)))
+						found_hiker = True
+
+						print('Here...')
+
+						if pm.current_dimension == 1 and dims_to_check == (1,):
+							current_radius = max_radius
+
+						if current_radius <= 0.5:
+							print('Found hiker B!')
+
+							plotter.plot_search_state(search_area, hiker, drone, probe=probe)
+							plotter.show(block=False)
+
+							return
+
+						break
 
 					plotter.plot_search_state(search_area, hiker, drone, empty_regions, probe=probe)
 					plotter.show(block=False)
 					
 					if hiker in probe:
-						print('Found hiker!', probe)
-						if probe.side_length <= 1:
+						pm.fix_coordinates(zip(dims_to_check, (sign * current_radius for sign in signs)))
+						found_hiker = True
+
+						if pm.current_dimension == 1 and not all_positive:
+							current_radius = max_radius
+
+						if current_radius <= 0.5:
 							plotter.plot_search_state(search_area, hiker, drone, probe=probe)
 							plotter.show(block=False)
 
-							print('Found hiker!')
+							print('Found hiker C!')
 
 							return
 
-						pm.fix_coordinates(zip(dims_to_check, (sign * current_radius for sign in signs)))
-						found_hiker = True
+
 						break
 
 				if found_hiker:
@@ -428,9 +481,9 @@ if __name__ == "__main__":
 
 	# Central binary search example
 	# 3D
-	plot_central_binary_search(plotter, Hypercube(Point.origin(3), 16), Point((-3.2992642252251754, 0.7909676092801083, 0.9790947724952259)), Point.origin(3))
+	# plot_central_binary_search(plotter, Hypercube(Point.origin(3), 16), Point((-3.2992642252251754, 0.7909676092801083, 0.9790947724952259)), Point.origin(3))
 	# 2D
-	# plot_central_binary_search(plotter, Hypercube(Point.origin(2), 32), Point((13, 4)), Point.origin(2))
+	plot_central_binary_search(plotter, Hypercube(Point.origin(2), 8), Point((-0.9633441330895276, -0.7936862679689765)), Point.origin(2))
 
 	# Uncomment one of the examples below to run it
 

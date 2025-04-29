@@ -7,7 +7,7 @@ from tqdm.auto import tqdm
 
 from square_utils import CoordinateType, Point, Hypercube
 
-from square_algorithms import SimulationResult, get_algorithms
+from square_algorithms import SimulationResult, get_algorithms, get_random_hiker_position
 
 RAW_DATA_DIRECTORY = Path('raw-data')
 RAW_DATA_DIRECTORY.mkdir(exist_ok=True)
@@ -49,10 +49,9 @@ def verify_algorithms(min_dim: int = 1, max_dim: int = 5, num_iterations: int = 
 		search_area = Hypercube(Point(tuple(0 for _ in range(dims))), side_length=n / 2)
 		drone = search_area.center
 
-		with tqdm(total=num_iterations * len(get_algorithms(dims)), desc=f"Verifying {dims}D") as pbar:
-			for _ in range(num_iterations):
-				for algorithm, generator in get_algorithms(dims):
-					hiker = generator(search_area)
+		with tqdm(total=num_iterations * len(get_algorithms(dims)), desc=f"Verifying {dims}D") as progress_bar:
+			for hiker in [get_random_hiker_position(search_area) for _ in range(num_iterations)]:
+				for algorithm in get_algorithms(dims):
 					if debug:
 						print(f'{algorithm.__name__} searching for hiker at {hiker}')
 						print(f'  Distance: {drone.distance_to(hiker)}')
@@ -60,7 +59,7 @@ def verify_algorithms(min_dim: int = 1, max_dim: int = 5, num_iterations: int = 
 					result = algorithm(search_area, hiker, drone)
 					assert hiker in result.area, f'{algorithm.__name__} failed to find hiker in {dims} dimensions'
 					assert result.area.side_length <= 1, f'{algorithm.__name__} final search area too large in {dims} dimensions'
-					pbar.update(1)
+					progress_bar.update(1)
 
 	print('All algorithms verified')
 
@@ -77,9 +76,10 @@ def run_simulation_batch(n: CoordinateType, dims: int, num_iterations: int = 2 *
 	search_area = Hypercube(Point(tuple(0 for _ in range(dims))), side_length=n / 2)
 	drone = search_area.center
 
-	for algorithm, generator in get_algorithms(dims):
-		hiker_positions = [generator(search_area) for _ in range(num_iterations)]
-		hiker_distances = [drone.distance_to(hiker) for hiker in hiker_positions]
+	hiker_positions = [get_random_hiker_position(search_area) for _ in range(num_iterations)]
+	hiker_distances = [drone.distance_to(hiker) for hiker in hiker_positions]
+
+	for algorithm in get_algorithms(dims):
 		results = [algorithm(search_area, hiker, drone) for hiker in hiker_positions]
 		save_simulation_results(algorithm.__name__, dims, n, list(zip(hiker_distances, results)), file_path)
 
@@ -242,7 +242,8 @@ def run_simulations(n: CoordinateType = 2**20, min_dim: int = 1, max_dim: int = 
 
 if __name__ == '__main__':
 	# Uncomment one of these examples to run:
-	verify_algorithms(debug=False)
+	verify_algorithms()
+	# verify_algorithms(n=8,debug=True)
 	# run_simulations()
 
 	# Run a single batch of simulations for a specific dimension

@@ -6,6 +6,31 @@ from typing import Callable, Generator, Iterable
 
 CoordinateType = int | float
 
+@dataclass(frozen=True, order=True)
+class Distances:
+	"""
+	Represents the distances between two points in d-dimensional space.
+
+	Attributes:
+		l1: The Manhattan (L1) distance.
+		l_infinity: The L-infinity (Chebyshev) distance.
+	"""
+	l1: CoordinateType
+	l_infinity: CoordinateType
+
+	def __add__(self, other: Distances) -> Distances:
+		"""Adds two Distances objects."""
+		return Distances(self.l1 + other.l1, self.l_infinity + other.l_infinity)
+
+	def __sub__(self, other: Distances) -> Distances:
+		"""Subtracts two Distances objects."""
+		return Distances(self.l1 - other.l1, self.l_infinity - other.l_infinity)
+	
+	@staticmethod
+	def zero() -> Distances:
+		"""Returns a Distances object with both distances set to zero."""
+		return Distances(0, 0)
+
 @dataclass(frozen=True)
 class Point:
 	"""
@@ -42,8 +67,20 @@ class Point:
 		"""Returns a string representation of the point."""
 		coord_str = ', '.join(map(str, self.coordinates))
 		return f"Point({coord_str})"
+	
+	def l_infinity_distance_to(self, other: Point) -> CoordinateType:
+		"""
+		Calculates the L-infinity (Chebyshev) distance to another point.
 
-	def distance_to(self, other: Point) -> CoordinateType:
+		Args:
+			other: The other Point object. Assumes it has the same dimension.
+
+		Returns:
+			The L-infinity distance between the two points.
+		"""
+		return max(abs(c1 - c2) for c1, c2 in zip(self.coordinates, other.coordinates))
+
+	def l1_distance_to(self, other: Point) -> CoordinateType:
 		"""
 		Calculates the Manhattan (L1) distance to another point.
 
@@ -54,6 +91,16 @@ class Point:
 			The L1 distance between the two points.
 		"""
 		return sum(abs(c1 - c2) for c1, c2 in zip(self.coordinates, other.coordinates))
+
+	def distance_to(self, other: Point) -> Distances:
+		"""
+		Calculates both the L1 and L-infinity distances to another point.
+		Args:
+			other: The other Point object. Assumes it has the same dimension.
+		Returns:
+			A Distances object containing the L1 and L-infinity distances.
+		"""
+		return Distances(self.l1_distance_to(other), self.l_infinity_distance_to(other))
 
 	def offset(self, offset: CoordinateType, dim: int) -> Point:
 		"""

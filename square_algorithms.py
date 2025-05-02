@@ -2,11 +2,11 @@ import itertools
 import random
 from typing import Callable, Literal, NamedTuple
 
-from square_utils import HypercubeGetter, Point, Hypercube, ProjectionManager, CoordinateType
+from square_utils import Distances, HypercubeGetter, Point, Hypercube, ProjectionManager, CoordinateType
 
 class SimulationResult(NamedTuple):
 	P: int # total number of probes
-	D: float # total distance traveled
+	D: Distances # total distance traveled under the L1 and L-infinity norms
 	num_responses: int # number of hiker responses
 	area: Hypercube
 
@@ -33,7 +33,7 @@ def simple_hypercube_search(search_area: Hypercube, hiker: Point, drone: Point) 
 	if search_area.side_length <= 1:
 		return SimulationResult(0, drone.distance_to(search_area.center), 0, search_area)
 
-	distance_traveled = 0
+	distance_traveled = Distances.zero()
 	num_probes = 0
 	num_responses = 0
 
@@ -102,7 +102,7 @@ def domino_2d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		return SimulationResult(2 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
 	num_probes = 0
-	distance_traveled = 0
+	distance_traveled = Distances.zero()
 	num_responses = 0
 
 	orthant_iter = search_area.orthants
@@ -252,7 +252,7 @@ def domino_3d_search(search_area: Hypercube, hiker: Point, drone: Point) -> Simu
 		return SimulationResult(3 + result.P, distance_traveled + result.D, num_responses + result.num_responses, result.area)
 
 	num_probes = 0
-	distance_traveled = 0
+	distance_traveled = Distances.zero()
 	num_responses = 0
 
 	all_orthants = list(search_area.orthants)
@@ -302,7 +302,7 @@ def naive_central_binary_search(search_area: Hypercube, hiker: Point, drone: Poi
 	pm = ProjectionManager(search_area.dimension)
 	current_radius = search_area.side_length / 2
 
-	distance_traveled = 0
+	distance_traveled = Distances.zero()
 	num_probes = 0
 	num_responses = 0
 
@@ -387,7 +387,7 @@ def central_binary_search(search_area: Hypercube, hiker: Point, drone: Point, hy
 	pm = ProjectionManager(search_area.dimension)
 	current_radius: CoordinateType = search_area.side_length / 2
 
-	distance_traveled = 0
+	distance_traveled = Distances.zero()
 	num_probes = 0
 	num_responses = 0
 

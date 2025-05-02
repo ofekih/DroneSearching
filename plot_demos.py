@@ -481,9 +481,9 @@ if __name__ == "__main__":
 
 	# Central binary search example
 	# 3D
-	# plot_central_binary_search(plotter, Hypercube(Point.origin(3), 16), Point((-3.2992642252251754, 0.7909676092801083, 0.9790947724952259)), Point.origin(3))
+	plot_central_binary_search(plotter, Hypercube(Point.origin(3), 16), Point((-3.2992642252251754, 0.7909676092801083, 0.9790947724952259)), Point.origin(3))
 	# 2D
-	plot_central_binary_search(plotter, Hypercube(Point.origin(2), 8), Point((-0.9633441330895276, -0.7936862679689765)), Point.origin(2))
+	# plot_central_binary_search(plotter, Hypercube(Point.origin(2), 8), Point((-0.9633441330895276, -0.7936862679689765)), Point.origin(2))
 
 	# Uncomment one of the examples below to run it
 

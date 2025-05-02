@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import Any, Callable
 from tqdm.auto import tqdm
 
-from square_utils import CoordinateType, Point, Hypercube
+from square_utils import CoordinateType, Distances, Point, Hypercube
 
 from square_algorithms import SimulationResult, get_algorithms, get_random_hiker_position, get_random_hiker_position_non_equal
 
@@ -20,7 +20,7 @@ DATA_FILE_INDEX = 0
 
 DATA_FILE = RAW_DATA_DIRECTORY / f'simulations_{DATA_FILE_INDEX}.csv'
 
-def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, results: list[tuple[CoordinateType, SimulationResult, HikerAlgorithmType]], file_path: Path | None = None):
+def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, results: list[tuple[Distances, SimulationResult, HikerAlgorithmType]], file_path: Path | None = None):
 	"""
 	Save simulation results to a CSV file.
 
@@ -37,12 +37,12 @@ def save_simulation_results(algorithm: str, dims: int, n: CoordinateType, result
 	if not output_file.exists():
 		with output_file.open('w') as f:
 			writer = csv.writer(f)
-			writer.writerow(['algorithm', 'dims', 'n', 'hiker_distance', 'P', 'D', 'num_responses', 'hiker_algorithm'])
+			writer.writerow(['algorithm', 'dims', 'n', 'hiker_distance_l1', 'hiker_distance_l_infinity', 'P', 'D_l1', 'D_l_infinity', 'num_responses', 'hiker_algorithm'])
 
 	# Append results to file
 	with output_file.open('a') as f:
 		writer = csv.writer(f)
-		writer.writerows([(algorithm, dims, n, hiker_distance, result.P, result.D, result.num_responses, hiker_algorithm)
+		writer.writerows([(algorithm, dims, n, hiker_distance.l1, hiker_distance.l_infinity, result.P, result.D.l1, result.D.l_infinity, result.num_responses, hiker_algorithm)
 						  for hiker_distance, result, hiker_algorithm in results])
 
 # set random seed
@@ -153,7 +153,7 @@ def run_simulations(n: CoordinateType = 2**20, min_dim: int = 1, max_dim: int = 
 		num_processes: Number of processes to use (defaults to CPU count)
 	"""
 	if num_processes is None:
-		num_processes = max(multiprocessing.cpu_count() - 1, 1)
+		num_processes = max(multiprocessing.cpu_count() - 2, 1)
 
 	# Calculate how many dimensions we're simulating
 	num_dims = max_dim - min_dim + 1
@@ -269,9 +269,9 @@ def run_simulations(n: CoordinateType = 2**20, min_dim: int = 1, max_dim: int = 
 
 if __name__ == '__main__':
 	# Uncomment one of these examples to run:
-	verify_algorithms()
+	verify_algorithms(max_dim=8)
 	# verify_algorithms(n=8,debug=True)
-	run_simulations()
+	run_simulations(max_dim=8)
 
 	# Run a single batch of simulations for a specific dimension
 	# run_simulation_batch(n=2**20, dims=3)

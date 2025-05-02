@@ -82,11 +82,13 @@ def visualize_square_data(data_file=None, output_dir=None):
     plt.figure(figsize=(14, 10))
     # Create a new column combining algorithm and hiker_algorithm for better visualization
     stats['algorithm_hiker'] = stats['algorithm'] + ' (' + stats['hiker_algorithm'] + ')'
-    sns.barplot(x='dims', y='P_mean_scaled', hue='algorithm_hiker', data=stats)
+    # Sort stats by dims before plotting
+    stats_sorted = stats.sort_values('dims')
+    sns.barplot(x='dims', y='P_mean_scaled', hue='algorithm_hiker', data=stats_sorted)
     plt.title('Average Number of Probes by Dimension, Algorithm and Hiker Type (Scaled by d * log₂(n))')
     plt.xlabel('Dimension')
     plt.ylabel('Average Number of Probes (P / (d * log₂(n)))')
-    plt.xticks(range(len(stats['dims'].unique())), sorted(stats['dims'].unique()))
+    plt.xticks(range(len(stats_sorted['dims'].unique())), sorted(stats_sorted['dims'].unique()))
     plt.legend(title='Algorithm (Hiker Type)', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(plots_dir / 'probes_by_dimension.png')
@@ -94,11 +96,11 @@ def visualize_square_data(data_file=None, output_dir=None):
 
     # 2. Plot D (distance traveled) scaled by d * n
     plt.figure(figsize=(14, 10))
-    sns.barplot(x='dims', y='D_mean_scaled', hue='algorithm_hiker', data=stats)
+    sns.barplot(x='dims', y='D_mean_scaled', hue='algorithm_hiker', data=stats_sorted)
     plt.title('Average Distance Traveled by Dimension, Algorithm and Hiker Type (Scaled by d * n)')
     plt.xlabel('Dimension')
     plt.ylabel('Average Distance Traveled (D / (d * n))')
-    plt.xticks(range(len(stats['dims'].unique())), sorted(stats['dims'].unique()))
+    plt.xticks(range(len(stats_sorted['dims'].unique())), sorted(stats_sorted['dims'].unique()))
     plt.legend(title='Algorithm (Hiker Type)', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(plots_dir / 'distance_by_dimension.png')
@@ -106,11 +108,11 @@ def visualize_square_data(data_file=None, output_dir=None):
 
     # 3. Plot num_responses scaled by d * log2(n)
     plt.figure(figsize=(14, 10))
-    sns.barplot(x='dims', y='num_responses_mean_scaled', hue='algorithm_hiker', data=stats)
+    sns.barplot(x='dims', y='num_responses_mean_scaled', hue='algorithm_hiker', data=stats_sorted)
     plt.title('Average Number of Responses by Dimension, Algorithm and Hiker Type (Scaled by d * log₂(n))')
     plt.xlabel('Dimension')
     plt.ylabel('Average Number of Responses (/ (d * log₂(n)))')
-    plt.xticks(range(len(stats['dims'].unique())), sorted(stats['dims'].unique()))
+    plt.xticks(range(len(stats_sorted['dims'].unique())), sorted(stats_sorted['dims'].unique()))
     plt.legend(title='Algorithm (Hiker Type)', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(plots_dir / 'responses_by_dimension.png')
@@ -118,11 +120,11 @@ def visualize_square_data(data_file=None, output_dir=None):
 
     # 4. Plot D/hiker_distance vs dimension for each algorithm
     plt.figure(figsize=(14, 10))
-    sns.barplot(x='dims', y='D_hiker_ratio_mean', hue='algorithm_hiker', data=stats)
+    sns.barplot(x='dims', y='D_hiker_ratio_mean', hue='algorithm_hiker', data=stats_sorted)
     plt.title('Average D/Hiker Distance Ratio by Dimension, Algorithm and Hiker Type')
     plt.xlabel('Dimension')
     plt.ylabel('Average D/Hiker Distance Ratio')
-    plt.xticks(range(len(stats['dims'].unique())), sorted(stats['dims'].unique()))
+    plt.xticks(range(len(stats_sorted['dims'].unique())), sorted(stats_sorted['dims'].unique()))
     plt.legend(title='Algorithm (Hiker Type)', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(plots_dir / 'distance_ratio_by_dimension.png')
@@ -140,8 +142,9 @@ def visualize_square_data(data_file=None, output_dir=None):
         plt.subplot(2, 2, i+1)
 
         # Plot the metric vs dimension for each algorithm and hiker type
-        for algorithm_hiker in stats['algorithm_hiker'].unique():
-            alg_data = stats[stats['algorithm_hiker'] == algorithm_hiker]
+        for algorithm_hiker in stats_sorted['algorithm_hiker'].unique():
+            alg_data = stats_sorted[stats_sorted['algorithm_hiker'] == algorithm_hiker]
+            alg_data = alg_data.sort_values('dims')
             plt.plot(alg_data['dims'], alg_data[metric], marker='o', label=algorithm_hiker)
 
         plt.title(title)
@@ -157,7 +160,8 @@ def visualize_square_data(data_file=None, output_dir=None):
     # 6. Create a heatmap comparing algorithms across dimensions using scaled metrics
     # For each scaled metric, create a pivot table with dimensions as rows and algorithm_hiker as columns
     for metric, title in zip(scaled_metrics, scaled_titles):
-        pivot = stats.pivot_table(index='dims', columns='algorithm_hiker', values=metric)
+        pivot = stats_sorted.pivot_table(index='dims', columns='algorithm_hiker', values=metric)
+        pivot = pivot.sort_index()
 
         plt.figure(figsize=(14, 10))
         sns.heatmap(pivot, annot=True, cmap='viridis', fmt='.2f')
@@ -166,45 +170,16 @@ def visualize_square_data(data_file=None, output_dir=None):
         plt.savefig(plots_dir / f'{metric}_heatmap.png')
         plt.close()
 
-    # 7. Create a radar chart comparing algorithms for each dimension
-    # This requires loading the raw data to get the correlation values
-    try:
-        # Try to load raw data if available
-        raw_data_file = data_file.parent / 'aggregated_square_data_raw.csv'
-        if raw_data_file.exists():
-            raw_df = pd.read_csv(raw_data_file)
-
-            # Create correlation plots for each algorithm, hiker type, and dimension
-            for algorithm in raw_df['algorithm'].unique():
-                for hiker_algorithm in raw_df['hiker_algorithm'].unique():
-                    for dim in sorted(raw_df['dims'].unique()):
-                        subset = raw_df[(raw_df['algorithm'] == algorithm) &
-                                        (raw_df['hiker_algorithm'] == hiker_algorithm) &
-                                        (raw_df['dims'] == dim)]
-
-                        if len(subset) > 0:
-                            plt.figure(figsize=(10, 8))
-                            corr_columns = ['hiker_distance', 'P', 'D', 'num_responses', 'D_hiker_ratio']
-                            corr_matrix = subset[corr_columns].corr()
-
-                            sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', vmin=-1, vmax=1, center=0)
-                            plt.title(f'Correlation Matrix: {algorithm} with {hiker_algorithm} hikers in {dim}D')
-                            plt.tight_layout()
-                            plt.savefig(plots_dir / f'correlation_{algorithm}_{hiker_algorithm}_{dim}d.png')
-                            plt.close()
-    except Exception as e:
-        print(f"Note: Could not generate correlation plots from raw data: {e}")
-
     # 8. Create a bar chart showing the efficiency of algorithms using scaled metrics
     # Efficiency defined as (P_mean_scaled * D_mean_scaled) - lower is better
-    stats['efficiency_scaled'] = stats['P_mean_scaled'] * stats['D_mean_scaled']
+    stats_sorted['efficiency_scaled'] = stats_sorted['P_mean_scaled'] * stats_sorted['D_mean_scaled']
 
     plt.figure(figsize=(14, 10))
-    sns.barplot(x='dims', y='efficiency_scaled', hue='algorithm_hiker', data=stats)
+    sns.barplot(x='dims', y='efficiency_scaled', hue='algorithm_hiker', data=stats_sorted)
     plt.title('Algorithm Efficiency by Dimension, Algorithm and Hiker Type (P/(d*log₂(n)) × D/(d*n), lower is better)')
     plt.xlabel('Dimension')
     plt.ylabel('Efficiency (P/(d*log₂(n)) × D/(d*n))')
-    plt.xticks(range(len(stats['dims'].unique())), sorted(stats['dims'].unique()))
+    plt.xticks(range(len(stats_sorted['dims'].unique())), sorted(stats_sorted['dims'].unique()))
     plt.legend(title='Algorithm (Hiker Type)', bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig(plots_dir / 'algorithm_efficiency.png')
@@ -214,8 +189,8 @@ def visualize_square_data(data_file=None, output_dir=None):
     # Normalize metrics within each dimension to compare algorithms on equal footing
     normalized_stats = []
 
-    for dim in sorted(stats['dims'].unique()):
-        dim_stats = stats[stats['dims'] == dim].copy()
+    for dim in sorted(stats_sorted['dims'].unique()):
+        dim_stats = stats_sorted[stats_sorted['dims'] == dim].copy()
 
         # Normalize each metric (lower values are better)
         for metric in ['P_mean_scaled', 'D_mean_scaled', 'D_hiker_ratio_mean']:
@@ -235,8 +210,8 @@ def visualize_square_data(data_file=None, output_dir=None):
     # Create a radar chart-like visualization using a grouped bar chart
     plt.figure(figsize=(15, 10))
 
-    for i, dim in enumerate(sorted(stats['dims'].unique())):
-        plt.subplot(len(stats['dims'].unique()), 1, i+1)
+    for i, dim in enumerate(sorted(stats_sorted['dims'].unique())):
+        plt.subplot(len(stats_sorted['dims'].unique()), 1, i+1)
 
         dim_data = normalized_df[normalized_df['dims'] == dim]
         metrics = ['P_mean_scaled_normalized', 'D_mean_scaled_normalized',
@@ -254,6 +229,8 @@ def visualize_square_data(data_file=None, output_dir=None):
                     })
 
         plot_df = pd.DataFrame(plot_data)
+        # Sort plot_df by metric for consistent x-axis
+        plot_df = plot_df.sort_values('metric')
         sns.barplot(x='metric', y='value', hue='algorithm', data=plot_df)
 
         plt.title(f'Normalized Scaled Metrics Comparison in {dim}D by Algorithm and Hiker Type')
@@ -262,7 +239,7 @@ def visualize_square_data(data_file=None, output_dir=None):
         plt.ylim(0, 1.1)
 
         # Only show legend on the last subplot
-        if i == len(stats['dims'].unique()) - 1:
+        if i == len(stats_sorted['dims'].unique()) - 1:
             plt.legend(title='Algorithm')
         else:
             plt.legend([],[], frameon=False)

@@ -1,6 +1,8 @@
 from collections import deque
 from dataclasses import dataclass
 from typing import Generator, NamedTuple, TypedDict, Callable
+import matplotlib
+matplotlib.use('TkAgg')
 from matplotlib import patches
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes

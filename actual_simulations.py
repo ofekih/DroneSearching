@@ -3,7 +3,7 @@ import random
 from typing import NamedTuple
 
 from algorithms import ALGORITHMS
-from utils import PRECISION, Circle
+from geometry_types import PRECISION, Circle
 import multiprocessing
 from pathlib import Path
 import csv
@@ -19,7 +19,7 @@ DATA_DIRECTORY.mkdir(exist_ok=True)
 class SimulationResult(NamedTuple):
 	P: int # total number of probes
 	D: float # total distance traveled
-	num_responses: int # number of hiker responses
+	num_responses: int # number of POI responses
 
 def save_simulation_results(algorithm: int, n: float, results: list[SimulationResult]):
 	with open(DATA_DIRECTORY / f"algorithm_{algorithm}.csv", "a", newline="") as f:
@@ -31,12 +31,12 @@ class Position(NamedTuple):
 	y: float
 
 # function that draws:
-# hiker with X
-# drone with D
+# POI with X
+# delta with Δ
 # probes with circles
 # given the search area
-def draw_step(probes: list[Circle], search_area: Circle, hiker: Position, drone: Position):	
-	fig, ax = plt.subplots(figsize=(10, 10))
+def draw_step(probes: list[Circle], search_area: Circle, poi: Position, delta: Position):	
+	fig, ax = plt.subplots(figsize=(10, 10)) # type: ignore
 	
 	# Draw search area
 	search_circle = plt_Circle((search_area.x, search_area.y), search_area.r, 
@@ -50,47 +50,47 @@ def draw_step(probes: list[Circle], search_area: Circle, hiker: Position, drone:
 								  fill=False, color='green', alpha=0.7)
 		ax.add_patch(probe_circle)
 	
-	# Draw hiker with X
-	ax.plot(hiker.x, hiker.y, 'rx', markersize=10, markeredgewidth=3, label='Hiker')
+	# Draw POI with X
+	ax.plot(poi.x, poi.y, 'rx', markersize=10, markeredgewidth=3, label='POI') # type: ignore
 	
-	# Draw drone with D
-	ax.plot(drone.x, drone.y, 'bo', markersize=8, label='Drone')
-	ax.text(drone.x, drone.y, 'D', color='white', ha='center', va='center', fontweight='bold')
+	# Draw delta with Δ
+	ax.plot(delta.x, delta.y, 'bo', markersize=8, label='Delta') # type: ignore
+	ax.text(delta.x, delta.y, 'Δ', color='white', ha='center', va='center', fontweight='bold') # type: ignore
 	
 	# Set limits and labels
 	max_radius = search_area.r * 1.2
 	ax.set_xlim(search_area.x - max_radius, search_area.x + max_radius)
 	ax.set_ylim(search_area.y - max_radius, search_area.y + max_radius)
 	ax.set_aspect('equal')
-	ax.set_title('Drone Search Visualization')
-	ax.legend()
-	ax.grid(True)
+	ax.set_title('Delta Search Visualization') # type: ignore
+	ax.legend() # type: ignore
+	ax.grid(True) # type: ignore
 	
-	plt.show()
+	plt.show() # type: ignore
 	
 
-def get_random_hiker_position(n: float):
+def get_random_poi_position(n: float):
 	r: float = random.uniform(0, n)
 	theta = random.uniform(0, 2 * math.pi)
 
 	return Position(r * math.cos(theta), r * math.sin(theta))
 
-def probe_query(probe: Circle, hiker: Position):
-	return math.sqrt((probe.x - hiker.x)**2 + (probe.y - hiker.y)**2) < probe.r + PRECISION.epsilon
+def probe_query(probe: Circle, poi: Position):
+	return math.sqrt((probe.x - poi.x)**2 + (probe.y - poi.y)**2) < probe.r + PRECISION.epsilon
 
-def scale_translate_and_rotate_probes(placement: list[Circle], search_area: Circle, drone: Position) -> list[Circle]:
+def scale_translate_and_rotate_probes(placement: list[Circle], search_area: Circle, delta: Position) -> list[Circle]:
 	# # first, scale and translate the probes
 	# scaled_and_translated_probes = [Circle(search_area.x + probe.x * search_area.r, search_area.y + probe.y * search_area.r, probe.r * search_area.r) for probe in placement]
 
-	# first, rotate the probes, such that the drone is as close to the first probe as possible
-	# find the angle between the first probe and the drone
+	# first, rotate the probes, such that the delta is as close to the first probe as possible
+	# find the angle between the first probe and the delta
 	first_x, first_y, _ = placement[0]
 	first_probe_angle = math.atan2(first_y, first_x)
 
 	origin_x, origin_y, _ = search_area
-	drone_angle = math.atan2(drone.y - origin_y, drone.x - origin_x)
+	delta_angle = math.atan2(delta.y - origin_y, delta.x - origin_x)
 
-	angle = drone_angle - first_probe_angle
+	angle = delta_angle - first_probe_angle
 
 	# next, rotate the probes
 	rotated_probes = [Circle(
@@ -108,40 +108,40 @@ def scale_translate_and_rotate_probes(placement: list[Circle], search_area: Circ
 	
 	return scaled_and_translated_probes
 
-def find_hiker(placement: list[Circle], search_area: Circle, hiker: Position, drone: Position = Position(0, 0)) -> SimulationResult:
-	# drone distance is drone distance from center
+def find_poi(placement: list[Circle], search_area: Circle, poi: Position, delta: Position = Position(0, 0)) -> SimulationResult:
+	# delta distance is delta distance from center
 	if search_area.r < 1.0 + PRECISION.epsilon:
-		# if drone is far from search area, drone must travel to search area
-		return SimulationResult(0, math.sqrt((drone.x - search_area.x)**2 + (drone.y - search_area.y)**2), 0)
+		# if delta is far from search area, delta must travel to search area
+		return SimulationResult(0, math.sqrt((delta.x - search_area.x)**2 + (delta.y - search_area.y)**2), 0)
 	
-	probes = scale_translate_and_rotate_probes(placement, search_area, drone)
+	probes = scale_translate_and_rotate_probes(placement, search_area, delta)
 
 	num_probes_done = 0
 	total_distance_traveled = 0
 	num_responses = 0
-	found_hiker = False
+	found_poi = False
 
-	# draw_step(probes, search_area, hiker, drone)
+	# draw_step(probes, search_area, poi, delta)
 
 	for probe in probes:
 		if probe == probes[-1]:
 			# last probe does not need to be performed
-			found_hiker = True
+			found_poi = True
 		else:
-			total_distance_traveled += math.sqrt((probe.x - drone.x)**2 + (probe.y - drone.y)**2)
-			drone = Position(probe.x, probe.y)
+			total_distance_traveled += math.sqrt((probe.x - delta.x)**2 + (probe.y - delta.y)**2)
+			delta = Position(probe.x, probe.y)
 
-			if probe_query(probe, hiker):
-				found_hiker = True
+			if probe_query(probe, poi):
+				found_poi = True
 				num_responses += 1
 
 			num_probes_done += 1
 
-		if found_hiker:
+		if found_poi:
 			# print probe index
 			# print(num_probes_done, end=', ')
 
-			remaining_work = find_hiker(placement, probe, hiker, drone)
+			remaining_work = find_poi(placement, probe, poi, delta)
 			num_probes_done += remaining_work.P
 			total_distance_traveled += remaining_work.D
 			num_responses += remaining_work.num_responses
@@ -150,10 +150,10 @@ def find_hiker(placement: list[Circle], search_area: Circle, hiker: Position, dr
 			return SimulationResult(num_probes_done, total_distance_traveled, num_responses)
 	
 	# raise error
-	raise Exception("Hiker not found")
+	raise Exception("POI not found")
 
 def simulate_algorithm(placement: list[Circle], n: float) -> SimulationResult:
-	return find_hiker(placement, Circle(0, 0, n), get_random_hiker_position(n))
+	return find_poi(placement, Circle(0, 0, n), get_random_poi_position(n))
 
 def simulate_specific_algorithm(algorithm: int, n: float, num_simulations: int, batch_size: int = 2 ** 13):
 	placement = ALGORITHMS[algorithm]
@@ -201,19 +201,19 @@ if __name__ == '__main__':
 	# # 	print(f"Circle {i}: {c.r} vs. {ALGORITHMS[6][0].r ** (i + 1)}")
 
 
-	# hiker = Position(x=492983.0212156907, y=-19415.937748734763)
-	# # hiker = Position(x=0, y=0)
+	# poi = Position(x=492983.0212156907, y=-19415.937748734763)
+	# # poi = Position(x=0, y=0)
 
-	# result = find_hiker(ALGORITHMS[6], Circle(0, 0, n), hiker)
+	# result = find_poi(ALGORITHMS[6], Circle(0, 0, n), poi)
 
 	# print(result)
 
 	# # while True:
-	# # 	hiker = get_random_hiker_position(n)
-	# # 	result = find_hiker(ALGORITHMS[6], Circle(0, 0, n), hiker)
+	# # 	poi = get_random_poi_position(n)
+	# # 	result = find_poi(ALGORITHMS[6], Circle(0, 0, n), poi)
 
 	# # 	if result.P == 78:
-	# # 		print(hiker)
+	# # 		print(poi)
 	# # 		break
 
 	# exit(0)

@@ -5,7 +5,10 @@ import math
 from dataclasses import dataclass
 
 import shapely
-from utils import PRECISION, Circle, covers_unit_circle, draw_circles, binary_search, get_biggest_semicovered_square, get_biggest_uncovered_square, get_distance_traveled, get_intersections
+from geometry_types import PRECISION, Circle
+from geometry_algorithms import covers_unit_circle, get_biggest_semicovered_square, get_biggest_uncovered_square, get_intersections
+from algorithm_plot import draw_circles
+from algorithm_utils import binary_search, get_distance_traveled
 
 from scipy import optimize
 from scipy.optimize._optimize import OptimizeResult

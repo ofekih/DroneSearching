@@ -160,7 +160,7 @@ def generate_latex_table():
     latex_table.extend([
         "\\hline",
         "\\end{tabular}",
-        "\\caption{A numerical comparison of simulation results for our 8 algorithms on three normalized performance metrics, namely the number of probes made ($P$), the total distance traveled by the drone ($D$), and the number of hiker responses ($R$). The best values are highlighted in bold. The category names used are crude abbreviations; see the main paper for their proper names.}",
+        "\\caption{A numerical comparison of simulation results for our 8 algorithms on three normalized performance metrics, namely the number of probes made ($P$), the total distance traveled by the delta ($D$), and the number of POI responses ($R$). The best values are highlighted in bold. The category names used are crude abbreviations; see the main paper for their proper names.}",
         "\\label{tab:algorithm_metrics}",
         "\\end{table*}"
     ])

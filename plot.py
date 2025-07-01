@@ -8,7 +8,7 @@ from typing import Callable, Literal
 from pandas import DataFrame
 
 OKABE_COLORS = ['#000000', '#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7']
-plt.rcParams['axes.prop_cycle'] = plt.cycler('color', OKABE_COLORS)
+plt.rcParams['axes.prop_cycle'] = plt.cycler('color', OKABE_COLORS)  # type: ignore
 plt.rcParams['text.usetex'] = True
 # plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 plt.rcParams['font.size'] = 21  # Increase base font size
@@ -23,6 +23,14 @@ def load_aggregated_results():
     data_path = Path(__file__).parent / "data" / "aggregated_results.csv"
     return pd.read_csv(data_path) # type: ignore
 
+def get_figures_dir():
+    """
+    Get the figures directory path, creating it if it doesn't exist
+    """
+    figures_dir = Path(__file__).parent / "figures"
+    figures_dir.mkdir(exist_ok=True)
+    return figures_dir
+
 def plot_normalized_metrics(plot_type: Literal['error_bars', 'boxplot'] = 'boxplot', show_minmax: bool = True):
     """
     Create plots for P/log2 n, D/n, and num_responses/log2 n for each algorithm
@@ -33,6 +41,9 @@ def plot_normalized_metrics(plot_type: Literal['error_bars', 'boxplot'] = 'boxpl
     """
     # Load the data
     df = load_aggregated_results()
+    
+    # Get figures directory
+    figures_dir = get_figures_dir()
     
     # Create three separate figures
     fig1, ax1 = plt.subplots(figsize=(8, 7))
@@ -47,37 +58,37 @@ def plot_normalized_metrics(plot_type: Literal['error_bars', 'boxplot'] = 'boxpl
         plot_metric_normalized(ax1, df, 'P', lambda n: math.log2(n), 'Normalized \\# of Probes $P/\\lceil \\log n \\rceil$', algorithms, show_minmax)
         plt.figure(fig1.number)
         plt.tight_layout()
-        plt.savefig('/home/ofekih/Documents/Research/drones/figures/P.png', dpi=300, bbox_inches='tight')
+        plt.savefig(figures_dir / 'P.png', dpi=300, bbox_inches='tight')
     else:
         plot_box_whisker_normalized(ax1, df, 'P', lambda n: math.log2(n), 'Normalized \\# of Probes $P/\\lceil \\log n \\rceil$', algorithms)
         plt.figure(fig1.number)
         plt.tight_layout()
-        plt.savefig('/home/ofekih/Documents/Research/drones/figures/P_box.png', dpi=300, bbox_inches='tight')
+        plt.savefig(figures_dir / 'P_box.png', dpi=300, bbox_inches='tight')
     
     # Plot D/n
     if plot_type == 'error_bars':
         plot_metric_normalized(ax2, df, 'D', lambda n: n, 'Normalized Distance Traveled $D/n$', algorithms, show_minmax)
         plt.figure(fig2.number)
         plt.tight_layout()
-        plt.savefig('/home/ofekih/Documents/Research/drones/figures/D.png', dpi=300, bbox_inches='tight')
+        plt.savefig(figures_dir / 'D.png', dpi=300, bbox_inches='tight')
     else:
         plot_box_whisker_normalized(ax2, df, 'D', lambda n: n, 'Normalized Distance Traveled $D/n$', algorithms)
         plt.figure(fig2.number)
         plt.tight_layout()
-        plt.savefig('/home/ofekih/Documents/Research/drones/figures/D_box.png', dpi=300, bbox_inches='tight')
+        plt.savefig(figures_dir / 'D_box.png', dpi=300, bbox_inches='tight')
     
     # Plot num_responses/log2 n
     if plot_type == 'error_bars':
-        plot_metric_normalized(ax3, df, 'num_responses', lambda n: math.log2(n), 'Normalized \\# Hiker Responses $R/\\lceil \\log n \\rceil$', algorithms, show_minmax)
+        plot_metric_normalized(ax3, df, 'num_responses', lambda n: math.log2(n), 'Normalized \\# POI Responses $R/\\lceil \\log n \\rceil$', algorithms, show_minmax)
         plt.figure(fig3.number)
         plt.tight_layout()
-        plt.savefig('/home/ofekih/Documents/Research/drones/figures/R.png', dpi=300, bbox_inches='tight')
+        plt.savefig(figures_dir / 'R.png', dpi=300, bbox_inches='tight')
     else:
-        plot_box_whisker_normalized(ax3, df, 'num_responses', lambda n: math.log2(n), 'Normalized \\# Hiker Responses $R/\\lceil \\log n \\rceil$', algorithms)
+        plot_box_whisker_normalized(ax3, df, 'num_responses', lambda n: math.log2(n), 'Normalized \\# POI Responses $R/\\lceil \\log n \\rceil$', algorithms)
         plt.figure(fig3.number)
         plt.tight_layout()
-        plt.savefig('/home/ofekih/Documents/Research/drones/figures/R_box.png', dpi=300, bbox_inches='tight')
-    
+        plt.savefig(figures_dir / 'R_box.png', dpi=300, bbox_inches='tight')
+
     plt.show()
 
 def plot_box_whisker_normalized(ax: Axes, df: DataFrame, metric: str, normalizer_func: Callable[[float], float], 

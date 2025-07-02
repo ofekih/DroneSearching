@@ -192,35 +192,39 @@ def run_algorithm_process(algorithm: int, n: float, num_simulations: int, batch_
 	print(f"Algorithm {algorithm} completed in {elapsed_time:.2f} seconds")
 	return algorithm, elapsed_time
 
-if __name__ == '__main__':
-	# Parameters for the simulations
-	n = 2**20
-	num_simulations = 2**22
-
-	# # for i, c in enumerate(ALGORITHMS[6]):
-	# # 	print(f"Circle {i}: {c.r} vs. {ALGORITHMS[6][0].r ** (i + 1)}")
-
-
-	# poi = Position(x=492983.0212156907, y=-19415.937748734763)
-	# # poi = Position(x=0, y=0)
-
-	# result = find_poi(ALGORITHMS[6], Circle(0, 0, n), poi)
-
-	# print(result)
-
-	# # while True:
-	# # 	poi = get_random_poi_position(n)
-	# # 	result = find_poi(ALGORITHMS[6], Circle(0, 0, n), poi)
-
-	# # 	if result.P == 78:
-	# # 		print(poi)
-	# # 		break
-
-	# exit(0)
+def parse_args():
+	"""Parse command line arguments for simulation parameters."""
+	import argparse
 	
-	# Setting a reasonable batch size - too large and it will use too much memory
-	# Too small and there will be too much overhead from file operations
-	batch_size = 2**16  # Adjust this based on available memory
+	parser = argparse.ArgumentParser(description='Run drone search simulations')
+	parser.add_argument('--n', type=int, default=2**20, 
+						help='Search area size parameter (default: 2^20)')
+	parser.add_argument('--num-simulations', type=int, default=2**22,
+						help='Total number of simulations to run (default: 2^22)')
+	parser.add_argument('--num-processors', type=int, default=None,
+						help='Number of processors to use (default: auto-detect)')
+	parser.add_argument('--batch-size', type=int, default=2**16,
+						help='Batch size for simulation chunks (default: 2^16)')
+	
+	return parser.parse_args()
+
+
+if __name__ == '__main__':
+	# Parse command line arguments
+	args = parse_args()
+	
+	# Parameters for the simulations
+	n = args.n
+	num_simulations = args.num_simulations
+	batch_size = args.batch_size
+	num_processors = args.num_processors
+	
+	print(f"Running simulations with:")
+	print(f"  n = {n}")
+	print(f"  num_simulations = {num_simulations:,}")
+	print(f"  batch_size = {batch_size:,}")
+	print(f"  num_processors = {num_processors if num_processors else 'auto-detect'}")
+	print()
 	
 	start_time_total = time.time()
 	
@@ -228,7 +232,7 @@ if __name__ == '__main__':
 	multiprocessing.set_start_method('spawn', force=True)
 	
 	# Create a pool of worker processes
-	with multiprocessing.Pool() as pool:
+	with multiprocessing.Pool(processes=num_processors) as pool:
 		# Map each algorithm to a separate process
 		jobs = []
 		for _ in range(num_simulations // batch_size):

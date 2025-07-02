@@ -229,4 +229,4 @@ def plot_metric_normalized(ax: Axes, df: DataFrame, metric: str, normalizer_func
 
 if __name__ == "__main__":
     plot_normalized_metrics(plot_type='error_bars', show_minmax=False)
-    # plot_normalized_metrics(plot_type='boxplot', show_minmax=False)
+    plot_normalized_metrics(plot_type='boxplot', show_minmax=False)

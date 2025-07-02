@@ -143,10 +143,109 @@ The algorithms demonstrate the theoretical trade-offs between:
 - **Distance efficiency**: Algorithms 5-6 minimize travel distance ($6.02$-$6.72n$)
 - **Response efficiency**: Algorithm 1 minimizes POI responses ($\leq\lceil\log n\rceil$)
 
+## Running Simulations
+
+In addition to testing individual algorithms, you can run large-scale simulations to gather statistical data on algorithm performance.
+
+### Step 1: Run Simulations
+
+Use `simulations.py` to run Monte Carlo simulations across all algorithms:
+
+```bash
+# Run with default parameters
+python simulations.py
+
+# Customize simulation parameters
+python simulations.py --n 1048576 --num-simulations 1000000 --batch-size 32768 --num-processors 4
+```
+
+#### Simulation Parameters
+
+- `--n`: Search area size parameter (default: 2^20 = 1,048,576)
+- `--num-simulations`: Total number of simulations to run (default: 2^22 = 4,194,304)
+- `--batch-size`: Number of simulations per batch (default: 2^16 = 65,536)
+- `--num-processors`: Number of CPU cores to use (default: auto-detect)
+
+#### What Simulations Do
+
+For each algorithm (1-8), the simulation:
+1. Generates random POI positions within the search area
+2. Runs the algorithm to locate each POI
+3. Records metrics: number of probes (P), distance traveled (D), and POI responses
+4. Saves results to CSV files in the `data/` directory
+
+#### Example Output
+
+```bash
+Running simulations with:
+  n = 1048576
+  num_simulations = 4,194,304
+  batch_size = 65,536
+  num_processors = 8
+
+Process for algorithm 1 started (PID: 12345)
+Algorithm 1: 15.2% complete (10/64 batches)
+...
+Algorithm 1 completed in 245.67 seconds
+```
+
+### Step 2: Aggregate Results
+
+After simulations complete, use `aggregate_results.py` to compute statistics:
+
+```bash
+python aggregate_results.py
+```
+
+This script:
+- Reads all individual simulation CSV files from `data/`
+- Computes statistical summaries (mean, std dev, quartiles, min/max)
+- Creates `data/aggregated_results.csv` with the summary statistics
+
+### Step 3: Generate Plots
+
+Finally, create visualizations using `plot.py`:
+
+```bash
+python plot.py
+```
+
+This generates plots showing:
+- **P/⌈log n⌉**: Normalized number of probes per algorithm
+- **D/n**: Normalized distance traveled per algorithm  
+- **R/⌈log n⌉**: Normalized POI responses per algorithm
+
+Plots are saved to the `figures/` directory in both error bar and box plot formats.
+
+### Complete Workflow Example
+
+```bash
+# 1. Run a quick test simulation
+python simulations.py --n 4096 --num-simulations 10000 --batch-size 1000
+
+# 2. Aggregate the results
+python aggregate_results.py
+
+# 3. Generate plots
+python plot.py
+```
+
+For publication-quality results, use larger parameters:
+```bash
+# Large-scale simulation (may take several hours)
+python simulations.py --n 1048576 --num-simulations 4194304 --num-processors 8
+python aggregate_results.py
+python plot.py
+```
+
 ## File Structure
 
 ```
 ├── algorithms.py           # Main algorithm implementations and CLI
+├── simulations.py          # Monte Carlo simulation runner
+├── aggregate_results.py    # Statistical aggregation of simulation data
+├── plot.py                # Visualization and plotting functions
+├── table.py               # Table generation utilities
 ├── requirements.txt        # Python dependencies
 ├── src/
 │   ├── geometry_types.py     # Core geometric data structures
@@ -154,7 +253,8 @@ The algorithms demonstrate the theoretical trade-offs between:
 │   ├── algorithm_utils.py    # Binary search and optimization utilities
 │   ├── algorithm_plot.py     # Visualization functions
 │   └── __pycache__/         # Compiled Python files
-└── data/                   # Data storage directory
+├── data/                   # Simulation results and aggregated data
+└── figures/                # Generated plots and visualizations
 ```
 
 ## Dependencies

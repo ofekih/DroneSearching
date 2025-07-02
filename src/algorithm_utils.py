@@ -2,7 +2,6 @@
 Utility functions for the drone searching algorithm including binary search, distance calculations, and optimization.
 """
 import math
-import time
 from typing import Callable, Optional, Any
 from dataclasses import dataclass
 
@@ -202,50 +201,3 @@ def optimize_circle_placement(p: float, k: int, pk: PkFunction,
         kwargs['x0'] = x0
     
     return optimize.differential_evolution(obj_func, **kwargs) # type: ignore
-
-
-def place_algorithm_11(p: float, pk: PkFunction,
-                      initial_circles: int = 6,
-                      optimization_kwargs: Optional[dict[str, Any]] = None,
-                      initial_guess: Optional[list[Circle]] = None) -> list[Circle]:
-    """Algorithm that uses differential evolution to optimize circle placement."""
-    start_time = time.time()
-    best_score = float('inf')
-    iterations = 0
-
-    print(p)
-
-    def progress_callback(xk: list[float], _: float) -> bool:
-        nonlocal best_score, iterations
-        iterations += 1
-        score = objective_function_global(xk, p, initial_circles, pk)
-        if score < best_score:
-            best_score = score
-            elapsed = time.time() - start_time
-            print(f"Iteration {iterations}: New best score = {best_score:.6g} (elapsed: {elapsed:.2f}s)")
-        return False
-
-    # Convert initial guess to optimization parameters if provided
-    x0 = None
-    if initial_guess is not None:
-        x0 = params_from_created_circles(initial_guess[:initial_circles])
-
-    # Run the optimization
-    result: OptimizeResult = optimize_circle_placement(p, initial_circles, pk, progress_callback, optimization_kwargs, x0)
-
-    if not result.success:
-        print(f"Warning: Optimization may not have converged: {result.message}")
-    
-    total_time = time.time() - start_time
-    print(f"Optimization complete in {result.nit} iterations ({total_time:.2f}s)")
-    
-    # Create the final circles using the optimized parameters
-    circles = create_circles_from_params(result.x, initial_circles, p, pk)
-    
-    # Add intelligent circles
-    from .geometry_algorithms import add_intelligent_circles
-    circles, area = add_intelligent_circles(p, pk, circles)
-
-    print(f'Final Remaining Area: {area:.6f}')
-    
-    return [Circle(float(circle.x), float(circle.y), float(circle.r)) for circle in circles]

@@ -1,5 +1,15 @@
 """
-Main simulation module for the drone searching algorithm.
+Marco Polo Problem: Geometric Localization Algorithms
+
+This module implements 8 algorithms for the Marco Polo problem, a combinatorial approach 
+to geometric localization using probe-based searching with binary responses. The algorithms
+locate points of interest (POIs) using circular probes and minimize different metrics:
+- P(n): Number of probes issued
+- D(n): Total distance traveled by the search point  
+- R_max: Maximum number of POI responses
+
+Algorithms range from hexagonal tilings to sophisticated optimization-based approaches,
+demonstrating various trade-offs between probe efficiency and travel distance.
 """
 from typing import Callable, Optional, Any
 import argparse
@@ -45,7 +55,11 @@ def find_all_pk(p: float, k: int) -> float:
 
 
 def place_algorithm_1():
-    """Algorithm 1: Regular hexagon pattern with fixed radius 0.5"""
+    """Algorithm 1: Hexagonal Algorithm (Hexagonal)
+    Uses a tiling of the search area with 7 hexagons of radius n/2.
+    Probes 6 of the 7 hexagons with radius-n/2 probes (POI must be in last if others fail).
+    Worst-case: P(n) ≤ 6⌈log n⌉ probes, D(n) ≤ 10.39n distance, R_max ≤ ⌈log n⌉ responses.
+    """
     r = 0.5
     circles = [Circle(0, 0, r)]
 
@@ -66,7 +80,11 @@ def place_algorithm_1():
 
 
 def place_algorithm_2():
-    """Algorithm 2: Modified pattern with larger initial circles"""
+    """Algorithm 2: Modified Hexagonal Algorithm (Hexagonal)
+    First probes upper two quadrants with radius n/√2 probes (eliminating 3 hexagons).
+    Then probes 3 of the remaining 4 hexagons as in Algorithm 1.
+    Better trade-off: P(n) ≤ 5⌈log n⌉ probes, D(n) ≤ 8.81n distance, R_max ≤ 2⌈log n⌉ responses.
+    """
     circles = [
         Circle(0, 0, 0.5),
         Circle(0.5, 0.5, 1/math.sqrt(2)),
@@ -91,6 +109,11 @@ def place_algorithm_2():
 
 
 def place_algorithm_3(p: float, pk: PkFunction = default_pk) -> list[Circle]:
+    """Algorithm 3: Progressive Chord-Based Shrinking (Chord-Based)
+    Places probe diameters as chords of the search circle in monotonic counterclockwise order.
+    Uses progressively shrinking probes with ρ₁ ≈ 0.844 to avoid uncovered areas.
+    Performance: P(n) < 4.08⌈log n⌉ probes, D(n) ≤ 6.95n distance.
+    """
     circles: list[Circle] = []
 
     current_angle = 0
@@ -122,6 +145,11 @@ def place_algorithm_3(p: float, pk: PkFunction = default_pk) -> list[Circle]:
 
 
 def place_algorithm_4(p: float, pk: PkFunction = default_pk) -> list[Circle]:
+    """Algorithm 4: Reordered Chord Placement (Chord-Based)
+    Non-monotonic version of Algorithm 3 with optimized probe placement.
+    Places two largest probes side by side, alternates remaining probes to minimize overlap.
+    Improved performance: P(n) < 3.54⌈log n⌉ probes, D(n) ≤ 9.31n distance.
+    """
     chords: list[tuple[float, float]] = []
 
     current_angle = 0
@@ -172,8 +200,11 @@ def place_algorithm_4(p: float, pk: PkFunction = default_pk) -> list[Circle]:
 
 
 def place_algorithm_5_5(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
-    """Central Plus Chords placement algorithm.
-    Places a central circle and places surrounding circles."""
+    """Algorithm 5: Central + Chords (Higher-Count Monotonic-Path)
+    Places a central probe, then places remaining probes along perimeter.
+    Uses chord-based placement for up to 8 probes per recursive level.
+    Performance: P(n) < 3.83⌈log n⌉ probes, D(n) ≤ 6.72n distance.
+    """
     circles: list[Circle] = []
     
     # Place central circle
@@ -232,8 +263,11 @@ def compute_x2(R: float, r: float):
 
 
 def place_algorithm_6(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
-    """Central Plus Optimized Chords placement algorithm.
-    Places a central circle and optimizes the placement of surrounding circles."""
+    """Algorithm 6: Central + Optimized Chords (Higher-Count Monotonic-Path)
+    Advanced version of Algorithm 5 with geometric optimization for probe positioning.
+    Balances coverage rate of inner and outer circumferences for optimal probe placement.
+    Best distance performance: P(n) < 3.34⌈log n⌉ probes, D(n) ≤ 6.02n distance.
+    """
     circles: list[Circle] = []
     
     # Place central circle
@@ -296,7 +330,11 @@ def place_algorithm_8(p: float, pk: PkFunction,
                       initial_circles: int = 6,
                       optimization_kwargs: Optional[dict[str, Any]] = None,
                       initial_guess: Optional[list[Circle]] = None) -> list[Circle]:
-    """Algorithm that uses differential evolution to optimize circle placement."""
+    """Algorithm 8: Differential Evolution Optimization (Darting)
+    Uses differential evolution algorithm to optimize placement of initial 6 probes.
+    Applies greedy gap-filling method for remaining probes.
+    Best probe performance: P(n) < 2.53⌈log n⌉ probes, D(n) ≤ 45.4n distance.
+    """
     from src.algorithm_utils import optimize_circle_placement, create_circles_from_params, params_from_created_circles, objective_function_global
     
     start_time = time.time()
@@ -348,7 +386,11 @@ def get_configuration(args: argparse.Namespace) -> tuple[PkFunction, int]:
 
 
 def place_algorithm_7(p: float, pk: PkFunction = default_pk, circle_placement_algorithm: CirclePlacerFunction = dummy_placement_algorithm) -> list[Circle]:
-    """Algorithm 10: Uses a base placement algorithm and then adds intelligent circles."""
+    """Algorithm 7: Darting Non-Monotonic (Darting)
+    Starts with Algorithm 4 (minus final probe), then greedily fills gaps.
+    Uses computer-assisted probe placement to efficiently cover search area.
+    Performance: P(n) < 2.93⌈log n⌉ probes, D(n) ≤ 25.8n distance.
+    """
     circles = circle_placement_algorithm(p, pk)
     return add_intelligent_circles(p, pk, circles)[0]
 
@@ -380,12 +422,22 @@ def get_placement_algorithm(algorithm: float) -> CirclePlacerFunction:
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='Marco Polo Problem: Geometric Localization Algorithms')
     parser.add_argument('--algorithm', type=float, required=True, choices=[1, 2, 3, 4, 5, 5.75, 6, 6.5, 7, 8],
-                       help='1: Regular Hexagon, 2: Modified Pattern, 3: Progressive Chords, 4: Reordered Chords Placement, 5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment, 7: Reordered Chords + Square Fill, 8: Optimization-based')
-    parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
-    parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
-    parser.add_argument('--debug', action='store_true', help='Enable debug output')
+                       help='Algorithm choice: '
+                            '1: Hexagonal Algorithm (Hexagonal) - 7 hexagons with radius n/2, P(n) ≤ 6⌈log n⌉; '
+                            '2: Modified Hexagonal Algorithm (Hexagonal) - Quadrant probes then hexagons, P(n) ≤ 5⌈log n⌉; '
+                            '3: Progressive Chord-Based Shrinking (Chord-Based) - Monotonic counterclockwise chords, P(n) < 4.08 log n; '
+                            '4: Reordered Chord Placement (Chord-Based) - Non-monotonic optimized placement, P(n) < 3.54 log n; '
+                            '5: Central + Chords (Higher-Count Monotonic-Path) - Central probe + perimeter chords, P(n) < 3.83 log n; '
+                            '5.75: Central + Chords w/ Final Adjustment; '
+                            '6: Central + Optimized Chords (Higher-Count Monotonic-Path) - Geometric optimization, P(n) < 3.34 log n; '
+                            '6.5: Central + Optimized Chords w/ Final Adjustment; '
+                            '7: Darting Non-Monotonic (Darting) - Algorithm 4 + greedy gap filling, P(n) < 2.93 log n; '
+                            '8: Differential Evolution Optimization (Darting) - Optimized placement + greedy filling, P(n) < 2.53 log n')
+    parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation instead of p^k')
+    parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1, actual precision is 2x+4)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug output to see intermediate steps')
 
     args = parser.parse_args()
     
@@ -424,16 +476,22 @@ def run_simulation(
     debug: bool = False
 ) -> tuple[float, float, float, list[Circle], float]:
     """
-    Run the circle packing simulation with the specified parameters.
+    Run the Marco Polo problem simulation with the specified algorithm.
     
     Args:
-        algorithm (float): Algorithm choice (3, 4, 5, 5.75, 6, 6.5, 7, or 8)
-        find_all (bool): Whether to use p^((k+1)/2) for radius calculation
-        precision (int): Decimal precision for calculations (minimum 1)
-        debug (bool): Enable debug output
+        algorithm (float): Algorithm choice (1-8)
+        find_all (bool): Whether to use p^((k+1)/2) for radius calculation instead of p^k
+        precision (int): Decimal precision for calculations (minimum 1, actual precision is 2x+4)
+        debug (bool): Enable debug output to see intermediate steps
     
     Returns:
-        tuple[float, float, list[Circle], float]: (p value, c value, list of circles, CPU time)
+        tuple[float, float, float, list[Circle], float]: (p value, c value, ct value, list of circles, CPU time)
+        where:
+        - p: optimal parameter value (ρ₁ for progressive shrinking algorithms)
+        - c: efficiency coefficient (probes per ⌈log n⌉)  
+        - ct: total distance traveled by the search point
+        - circles: list of probe positions and radii
+        - CPU time: execution time in seconds
     """
     if precision < 1:
         raise ValueError('Precision must be at least 1')

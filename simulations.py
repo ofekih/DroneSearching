@@ -1,818 +1,251 @@
-from typing import Callable, Any, Optional
-import argparse
-import time
 import math
-from dataclasses import dataclass
-
-import shapely
-from geometry_types import PRECISION, Circle
-from geometry_algorithms import covers_unit_circle, get_biggest_semicovered_square, get_biggest_uncovered_square, get_intersections
-from algorithm_plot import draw_circles
-from algorithm_utils import binary_search, get_distance_traveled
-
-from scipy import optimize
-from scipy.optimize._optimize import OptimizeResult
-import itertools
-
-PkFunction = Callable[[float, int], float]
-CirclePlacerFunction = Callable[[float, PkFunction], list[Circle]]
-
-def dummy_placement_algorithm(_p: float, _pk: PkFunction) -> list[Circle]:
-    return []
-
-def default_pk(p: float, k: int) -> float:
-    """Default pk function that returns p^k"""
-    return p ** k
-
-def find_all_pk(p: float, k: int) -> float:
-    """pk function that returns p^((k + 1) / 2)"""
-    return p ** ((k + 1) / 2)
-
-def get_configuration(args: argparse.Namespace) -> tuple[PkFunction, int]:
-    """Get pk function and c_multiplier based on arguments."""
-    if args.find_all:
-        return find_all_pk, 2
-    return default_pk, 1
-
-def place_algorithm_1():
-    r = 0.5
-    circles = [Circle(0, 0, r)]
-
-    theta = 0
-    theta_step = 2 * math.asin(r)
-    while theta < 2 * math.pi:
-        current_coord = (math.cos(theta), math.sin(theta))
-        theta += theta_step
-        next_coord = (math.cos(theta), math.sin(theta))
-
-        circles.append(Circle(
-            (current_coord[0] + next_coord[0]) / 2,
-            (current_coord[1] + next_coord[1]) / 2,
-            r
-        ))
-
-    return circles
-
-def place_algorithm_2():
-    circles = [
-        Circle(0, 0, 0.5),
-        Circle(0.5, 0.5, 1/math.sqrt(2)),
-        Circle(-0.5, 0.5, 1/math.sqrt(2)),
-    ]
-
-    r = 0.5
-    theta = math.pi
-    theta_step = 2 * math.asin(r)
-    while theta < 2 * math.pi:
-        current_coord = (math.cos(theta), math.sin(theta))
-        theta += theta_step
-        next_coord = (math.cos(theta), math.sin(theta))
-
-        circles.append(Circle(
-            (current_coord[0] + next_coord[0]) / 2,
-            (current_coord[1] + next_coord[1]) / 2,
-            r
-        ))
-
-    return circles
-
-def place_algorithm_4(p: float, pk: PkFunction = default_pk) -> list[Circle]:
-    circles: list[Circle] = []
-
-    current_angle = 0
-    k = 1
-
-    while current_angle < 2 * math.pi:
-        current_radius = pk(p, k)
-        if current_radius < PRECISION.epsilon:
-            return [] # failure
-
-        current_coord = (math.cos(current_angle), 
-                        math.sin(current_angle))
-        current_angle += 2 * math.asin(current_radius)
-        # current_angle = min(current_angle + 2 * asin(current_radius), 2 * pi())
-
-        next_coord = (math.cos(current_angle), 
-                     math.sin(current_angle))
-        
-        new_circle = Circle(
-            (current_coord[0] + next_coord[0]) / 2,
-            (current_coord[1] + next_coord[1]) / 2,
-            current_radius
-        )
-
-        circles.append(new_circle)
-        k += 1
-
-    return circles
-
-def place_algorithm_5(p: float, pk: PkFunction = default_pk) -> list[Circle]:
-    chords: list[tuple[float, float]] = []
-
-    current_angle = 0
-    k = 1
-    while current_angle < 2 * math.pi:
-        current_radius = pk(p, k)
-        if current_radius < PRECISION.epsilon:
-            return [] # failure
-
-        chord_angle = 2 * math.asin(current_radius)
-        chords.append((chord_angle, current_radius))
-        current_angle += chord_angle
-
-        k += 1
-
-    CCW: list[tuple[float, float]] = [chords[0]]
-    CW: list[tuple[float, float]] = []
-    CCW_sum = CW_sum = 0
-
-    for chord_angle, radius in chords[:0:-1]:
-        if CCW_sum < CW_sum:
-            CCW.append((chord_angle, radius))
-            CCW_sum += chord_angle
-        else:
-            CW.append((chord_angle, radius))
-            CW_sum += chord_angle
-
-    circles: list[Circle] = []
-
-    current_angle = 0
-    for chord_angle, radius in CCW + CW[::-1]:
-        current_coord = (math.cos(current_angle), 
-                        math.sin(current_angle))
-        current_angle += chord_angle
-
-        next_coord = (math.cos(current_angle), 
-                     math.sin(current_angle))
-
-        new_circle = Circle(
-            (current_coord[0] + next_coord[0]) / 2,
-            (current_coord[1] + next_coord[1]) / 2,
-            radius
-        )
-
-        circles.append(new_circle)
-
-    return sorted(circles, key=lambda c: c.r, reverse=True)
-
-def place_algorithm_5_5(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
-    """Central Plus Chords placement algorithm.
-    Places a central circle and places surrounding circles."""
-    circles: list[Circle] = []
-    
-    # Place central circle
-    central_radius = pk(p, 1)
-    circles.append(Circle(0, 0, central_radius))
-    
-    # Place surrounding circles
-    k = 2
-    current_angle = 0
-    while current_angle < 2 * math.pi:
-        current_radius = pk(p, k)
-        if current_radius < PRECISION.epsilon:
-            return [] # failure
-        
-        current_coord = (math.cos(current_angle), math.sin(current_angle))
-        current_angle = min(current_angle + 2 * math.asin(current_radius), 2 * math.pi)
-
-        if final_optimization and current_angle >= 2 * math.pi:
-            current_radius = pk(p, k - 1)
-            points = get_intersections(circles[0], circles[-1])
-            if points:
-                current_coord = max(points, key=lambda p: p[0])
-
-        next_coord = (math.cos(current_angle), math.sin(current_angle))
-        
-        new_circle = Circle(
-            (current_coord[0] + next_coord[0]) / 2,
-            (current_coord[1] + next_coord[1]) / 2,
-            current_radius
-        )
-
-        circles.append(new_circle)
-        k += 1
-    
-    return circles
-
-def compute_R_T(R: float, b: float):
-    a = b * R
-    c = 1 - R
-    d = math.sqrt(a * b + c ** 2)
-    q = (b + c + d) / 2
-
-    return b * c * d / (4 * math.sqrt(q * (q - b) * (q - c) * (q - d)))
-
-def compute_x2(R: float, r: float):
-    theta = math.asin(r)
-    beta = math.pi / 2 - theta
-    sin_beta = math.sin(beta)
-    c = 1 - R
-    z = c * sin_beta
-    y = math.sqrt(c ** 2 * (1 - sin_beta ** 2))
-
-    return (r - y) ** 2 + z ** 2
-
-def place_algorithm_6(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
-    """Central Plus Optimized Chords placement algorithm.
-    Places a central circle and optimizes the placement of surrounding circles."""
-    circles: list[Circle] = []
-    
-    # Place central circle
-    central_radius = pk(p, 1)
-    circles.append(Circle(0, 0, central_radius))
-    
-    # Place surrounding circles
-    k = 2
-    current_angle = 0
-    while current_angle < 2 * math.pi:
-        current_radius = pk(p, k)
-        if current_radius < PRECISION.epsilon:
-            return circles # failure
-
-        theta = 0
-        points = None
-        
-        if final_optimization and current_angle + 2 * math.asin(current_radius) >= 2 * math.pi:
-            current_radius = pk(p, k - 1)
-            points = get_intersections(circles[1], circles[-1])
-        
-        if points:
-            remaining_angle = math.pi - current_angle / 2
-            next_coord = (math.cos(-remaining_angle), math.sin(-remaining_angle))
-
-            current_coord = max(points, key=lambda p: p[0])
-            new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
-            theta = 2 * math.pi
-        else:
-            R = circles[0].r
-            r = current_radius
-            B = (1 - R) / 2
-            if current_radius ** 2 < compute_x2(circles[0].r, current_radius) and B < current_radius:
-                theta = math.atan(math.sqrt(4 * r ** 2 - (1 - R) ** 2) / (R + 1))
-                distance_from_center = (1 + R) / (2 * math.cos(theta))
-                new_circle_center = (distance_from_center * math.cos(current_angle + theta), distance_from_center * math.sin(current_angle + theta))
-            else:
-                b = 2 * current_radius
-                theta = math.asin(b / 2)
-
-                current_coord = (math.cos(current_angle), math.sin(current_angle))
-                next_coord = (math.cos(current_angle + 2 * theta), math.sin(current_angle + 2 * theta))
-                new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
-
-        current_angle += 2 * theta
-
-        new_circle = Circle(
-            new_circle_center[0],
-            new_circle_center[1],
-            current_radius
-        )
-
-        circles.append(new_circle)
-        k += 1
-    
-    return circles
-
-def place_algorithm_10(p: float, pk: PkFunction = default_pk, circle_placement_algorithm: CirclePlacerFunction = dummy_placement_algorithm) -> list[Circle]:
-    circles = circle_placement_algorithm(p, pk)
-
-    return add_intelligent_circles(p, pk, circles)[0]
-
-    k = len(circles) + 1
-    while True:
-        current_radius = pk(p, k)
-
-        biggest_uncovered_square = get_biggest_uncovered_square(circles)
-        if biggest_uncovered_square is None:
-            break
-
-        if current_radius < PRECISION.epsilon:
-            return []
-
-        new_circle = Circle(
-            biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
-            biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
-            current_radius
-        )
-        
-        circles.append(new_circle)
-        k += 1
-
-    return circles
-
-def get_empty_area(circles: list[Circle]) -> float:
-    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
-    uncovered_polygons = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
-
-    return uncovered_polygons.area
-
-def add_centroid_circles(p: float, pk: PkFunction, circles: list[Circle]) -> tuple[list[Circle], float]:
-    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
-    uncovered_polygons = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
-
-    k = len(circles) + 1
-
-    while True:
-        current_radius = pk(p, k)
-
-        if current_radius < PRECISION.epsilon:
-            break
-
-        if uncovered_polygons.area < PRECISION.epsilon ** 2:
-            biggest_uncovered_square = get_biggest_uncovered_square(circles)
-            if biggest_uncovered_square is None:
-                biggest_uncovered_square = get_biggest_semicovered_square(circles)
-                if biggest_uncovered_square is None:
-                    return circles, 0
-            
-            new_circle = Circle(
-                biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
-                biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
-                current_radius
-            )
-            
-            circles.append(new_circle)
-            k += 1
-            continue
-        
-        # print(f'Remaining area: {uncovered_polygons.area}')
-
-        largest_geom = max(uncovered_polygons.geoms, key=lambda g: g.area) if hasattr(uncovered_polygons, 'geoms') else uncovered_polygons # type: ignore
-        centroid = largest_geom.centroid # type: ignore
-        new_circle = Circle(centroid.x, centroid.y, current_radius) # type: ignore
-        circles.append(new_circle)
-        k += 1
-
-        uncovered_polygons = uncovered_polygons.difference(PRECISION.get_circle_polygon(new_circle)) # type: ignore
-
-    return circles, uncovered_polygons.area
-
-def get_circle_centers(x1: float, y1: float, x2: float, y2: float, r: float):
-    dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
-
-    if dist > 2 * r:
-        return
-    if dist == 0 and r != 0:
-        return
-    if dist == 0 and r == 0:
-        return
-
-    mid_x = (x1 + x2) / 2
-    mid_y = (y1 + y2) / 2
-
-    if dist == 2 * r:
-        yield (mid_x, mid_y)
-        return
-
-    a = (r**2) - (dist/2)**2
-    if a < 0:
-      # Numerical instability could cause slight negative due to floating point errors.
-      # Should happen when dist is very close to 2 * r. Just treat it as zero.
-      a = 0
-
-    a = math.sqrt(a)
-
-    # Calculate the coordinates of the intersection points.
-    dx = x2 - x1
-    dy = y2 - y1
-
-    x3 = mid_x + (a * dy / dist)
-    y3 = mid_y - (a * dx / dist)
-    x4 = mid_x - (a * dy / dist)
-    y4 = mid_y + (a * dx / dist)
-
-    yield (x3, y3)
-    yield (x4, y4)
-
-def intelligently_minimize(largest_geom: shapely.geometry.base.BaseGeometry, r: float) -> Circle:
-    convex_hull = largest_geom.convex_hull
-
-    # Get vertices of convex hull
-    all_vertices: list[tuple[float, float]] = list(convex_hull.exterior.coords)[:-1] # type: ignore
-
-    vertices: list[tuple[float, float]] = []
-    for i in range(len(all_vertices)):
-        x1, y1 = all_vertices[i]
-        x2, y2 = all_vertices[(i + 1) % len(all_vertices)]
-        x3, y3 = all_vertices[(i + 2) % len(all_vertices)]
-
-        dx1 = x2 - x1
-        dy1 = y2 - y1
-        dx2 = x3 - x2
-        dy2 = y3 - y2
-
-        dot = dx1 * dx2 + dy1 * dy2
-        det = dx1 * dy2 - dy1 * dx2
-        angle = math.atan2(det, dot)
-
-        if max(abs(angle), math.pi - abs(angle)) <= math.pi * 0.9:
-            vertices.append((x2, y2))
-
-    if len(vertices) > 10:
-        return Circle(largest_geom.centroid.x, largest_geom.centroid.y, r)
-
-    max_area = 0
-    max_circle = None
-    for (x1, y1), (x2, y2) in itertools.combinations(vertices, 2):
-        for (x0, y0) in get_circle_centers(x1, y1, x2, y2, r):
-            circle = Circle(x0, y0, r)
-            circle_polygon = PRECISION.get_circle_polygon(circle)
-
-            # Calculate area of the intersection
-            intersection = largest_geom.intersection(circle_polygon)
-            if intersection.area > max_area:
-                max_area = intersection.area
-                max_circle = circle
-        
-    return max_circle if max_circle else Circle(largest_geom.centroid.x, largest_geom.centroid.y, r)
-
-def add_intelligent_circles(p: float, pk: PkFunction, circles: list[Circle]) -> tuple[list[Circle], float]:
-    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
-    uncovered_polygons = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
-
-    k = len(circles) + 1
-
-    while True:
-        current_radius = pk(p, k)
-
-        if current_radius < PRECISION.epsilon:
-            break
-
-        if uncovered_polygons.area < PRECISION.epsilon ** 2:
-            biggest_uncovered_square = get_biggest_uncovered_square(circles)
-            if biggest_uncovered_square is None:
-                biggest_uncovered_square = get_biggest_semicovered_square(circles)
-                if biggest_uncovered_square is None:
-                    return circles, 0
-            
-            new_circle = Circle(
-                biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
-                biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
-                current_radius
-            )
-            
-            circles.append(new_circle)
-            k += 1
-            continue
-        
-        # print(f'Remaining area: {uncovered_polygons.area}')
-
-        largest_geom = max(uncovered_polygons.geoms, key=lambda g: g.area) if hasattr(uncovered_polygons, 'geoms') else uncovered_polygons # type: ignore
-        
-        new_circle: Circle = intelligently_minimize(largest_geom, current_radius) # type: ignore
-        circles.append(new_circle)
-        k += 1
-
-        uncovered_polygons = uncovered_polygons.difference(PRECISION.get_circle_polygon(new_circle)) # type: ignore
-
-    return circles, uncovered_polygons.area
-
-# Algorithm 11 helper functions
-def create_circles_from_params(params: list[float], k: int, p: float, pk: PkFunction) -> list[Circle]:
-    """Helper function to create circles from optimization parameters"""
-    circles: list[Circle] = []
-    
-    # First circle is constrained to the -x axis
-    dx = params[0]
-    circle1 = Circle(-dx, 0, pk(p, 1))
-    circles.append(circle1)
-    
-    # Add the remaining k-1 circles
-    for i in range(1, k):
-        theta_idx = 2*i - 1
-        d_idx = 2*i
-        
-        theta = params[theta_idx]
-        d = params[d_idx]
-        
-        circle = Circle(d * math.cos(theta), d * math.sin(theta), pk(p, i+1))
-        circles.append(circle)
-        
-    return circles
-
-def params_from_created_circles(circles: list[Circle]) -> list[float]:
-    """Convert a list of Circle objects into optimization parameters.
-    
-    For the first circle, extracts the distance from origin on -x axis.
-    For remaining circles, extracts angle (theta) and distance (d) from origin.
-    
-    Args:
-        circles: List of Circle objects to convert into parameters
-        
-    Returns:
-        List of parameters in the format [dx, theta1, d1, theta2, d2, ...]
-    """
-    params: list[float] = []
-    
-    # First circle: distance from origin on -x axis
-    params.append(-circles[0].x)  # Convert to positive distance
-    
-    # Remaining circles: extract theta and distance
-    for circle in circles[1:]:
-        x, y = circle.x, circle.y
-        theta = math.atan(y/x) if x != 0 else math.pi/2 if y > 0 else -math.pi/2
-        if x < 0:  # atan gives angle in [-pi/2, pi/2], adjust for x < 0
-            theta = theta + math.pi if y >= 0 else theta - math.pi
-        d = math.sqrt(x*x + y*y)
-        params.extend([theta, d])
-    
-    return params
-
-def objective_function_global(x: list[float], p: float, k: int, pk: PkFunction) -> float:
-    """Calculate the objective function value (remaining area) for given parameters"""
-    circles = create_circles_from_params(x, k, p, pk)
-    # _, remaining_area = add_centroid_circles(p, pk, circles)
-    _, remaining_area = add_intelligent_circles(p, pk, circles)
-    return remaining_area
-
-@dataclass
-class ObjectiveFunctionWrapper:
-    """A pickleable wrapper class for the objective function."""
-    p: float
-    k: int
-    pk: PkFunction
-    
-    def __call__(self, x: list[float]) -> float:
-        return objective_function_global(x, self.p, self.k, self.pk)
-
-def optimize_circle_placement(p: float, k: int, pk: PkFunction,
-                          callback: Optional[Callable[[list[float], float], bool]] = None,
-                          optimization_kwargs: Optional[dict[str, Any]] = None,
-                          x0: Optional[list[float]] = None) -> OptimizeResult:
-    """Optimize the placement of k circles with parameter p and radius function pk."""
-    # Create bounds for optimization
-    # First parameter (dx) is between 0 and 1
-    bounds: list[tuple[float, float]] = [(0, 1)]
-    
-    # For each of the k-1 remaining circles, we need bounds for theta and d
-    # theta can be between -pi and pi
-    # d can be between 0 and 1
-    for _ in range(1, k):
-        bounds.extend([(-math.pi, math.pi), (0, 1)])
-    
-    obj_func = ObjectiveFunctionWrapper(p, k, pk)
-
-    # Default optimization parameters
-    kwargs: dict[str, Any] = {
-        'bounds': bounds,
-        'seed': 0,  # For reproducibility
-        'mutation': (0.5, 1.0),  # Allow mutation rate to adapt
-        'workers': -1,  # Use all available cores
-        'updating': 'deferred',  # Use deferred updating,
-        'popsize': 15,  # Population size
-        'maxiter': 2000,
-        'atol': PRECISION.epsilon / 10,
-    }
-    
-    # Update with any custom parameters
-    if optimization_kwargs:
-        kwargs.update(optimization_kwargs)
-    
-    if callback:
-        kwargs['callback'] = callback
-
-    if x0 is not None:
-        kwargs['x0'] = x0
-    
-    return optimize.differential_evolution(obj_func, **kwargs) # type: ignore
-
-def place_algorithm_11(p: float, pk: PkFunction = default_pk,
-                      initial_circles: int = 6,
-                      optimization_kwargs: Optional[dict[str, Any]] = None,
-                      initial_guess: Optional[list[Circle]] = None) -> list[Circle]:
-    """Algorithm that uses differential evolution to optimize circle placement."""
-    start_time = time.time()
-    best_score = float('inf')
-    iterations = 0
-
-    print(p)
-
-    def progress_callback(xk: list[float], _: float) -> bool:
-        nonlocal best_score, iterations
-        iterations += 1
-        score = objective_function_global(xk, p, initial_circles, pk)
-        if score < best_score:
-            best_score = score
-            elapsed = time.time() - start_time
-            print(f"Iteration {iterations}: New best score = {best_score:.6g} (elapsed: {elapsed:.2f}s)")
-        return False
-
-    # Convert initial guess to optimization parameters if provided
-    x0 = None
-    if initial_guess is not None:
-        x0 = params_from_created_circles(initial_guess[:initial_circles])
-
-    # Run the optimization
-    result: OptimizeResult = optimize_circle_placement(p, initial_circles, pk, progress_callback, optimization_kwargs, x0)
-
-    if not result.success:
-        print(f"Warning: Optimization may not have converged: {result.message}")
-    
-    total_time = time.time() - start_time
-    print(f"Optimization complete in {result.nit} iterations ({total_time:.2f}s)")
-    
-    # Create the final circles using the optimized parameters
-    circles = create_circles_from_params(result.x, initial_circles, p, pk)
-    
-    # Add centroid circles
-    # circles, area = add_centroid_circles(p, pk, circles)
-    circles, area = add_intelligent_circles(p, pk, circles)
-
-    print(f'Final Remaining Area: {area:.6f}')
-    
-    return [Circle(float(circle.x), float(circle.y), float(circle.r)) for circle in circles]
-
-def get_placement_algorithm(algorithm: float) -> CirclePlacerFunction:
-    """Get the appropriate placement algorithm based on argument."""
-    if algorithm == 4:
-        return place_algorithm_4
-    elif algorithm == 5:
-        return place_algorithm_5
-    elif algorithm == 5.5:
-        return lambda p, pk: place_algorithm_5_5(p, pk, final_optimization=False)
-    elif algorithm == 5.75:
-        return place_algorithm_5_5
-    elif algorithm == 6:
-        return lambda p, pk: place_algorithm_6(p, pk, final_optimization=False)
-    elif algorithm == 6.5:
-        return place_algorithm_6
-    elif algorithm == 10:
-        circle_placement_algorithm: CirclePlacerFunction = lambda p, pk: place_algorithm_5(p, pk)[:-1]
-        # circle_placement_algorithm: CirclePlacerFunction = lambda p, pk: place_algorithm_6(p, pk)
-        return lambda p, pk: place_algorithm_10(p, pk, circle_placement_algorithm)
-    elif algorithm == 11:
-        initial_guess_find_one = [Circle(x=-0.4652323341815545, y=0.0, r=0.7606738281250001), Circle(x=0.631835807925796, y=0.1903730016493503, r=0.5786246727943422), Circle(x=0.3697940080061505, y=-0.6721376127407843, r=0.4401446449020478), Circle(x=0.10868020756478226, y=0.809927396170051, r=0.3348065119663595), Circle(x=-0.2268096324157326, y=-0.8507008005358745, r=0.2546785511386293), Circle(x=-0.35105515226951206, y=0.8525717091300288, r=0.19372730843594976), Circle(x=0.8334512813738311, y=-0.45141887403603526, r=0.14736329332032652), Circle(x=0.5066812387531501, y=0.8205098167780042, r=0.11209540045508003), Circle(x=-0.5338611091463583, y=-0.8110230105587689, r=0.0852680373793706), Circle(x=-0.5799133384414544, y=0.7846827534845661, r=0.06486116441007143), Circle(x=0.024957526866519295, y=-0.980222221404978, r=0.049338190228454044), Circle(x=-0.6306083956676077, y=-0.7532837868134962, r=0.03753027003383761), Circle(x=0.9308286536798448, y=-0.3196167621135757, r=0.028548294177204232), Circle(x=-0.6507673738092681, y=0.7465983474462492, r=0.02171594021821259), Circle(x=0.621415822507479, y=0.774187508417866, r=0.01651874737712142), Circle(x=-0.1931950036775884, y=0.9728756836537937, r=0.012565378803184755), Circle(x=-0.6723563363140392, y=-0.7368493091564825, r=0.00955815479605928), Circle(x=-0.6750275665055643, y=0.7343573392884171, r=0.0072706381985297415), Circle(x=0.9514513927696395, y=-0.2968022336890622, r=0.0055305841913874726), Circle(x=-0.18133794081650303, y=0.9813524299000489, r=0.004206970648630317), Circle(x=0.9554387725018909, y=-0.2904077680461287, r=0.0032001324681031375), Circle(x=-0.6814658353052274, y=-0.7300857539758098, r=0.0024342570150191183), Circle(x=-0.682339445375422, y=0.7298309511390368, r=0.0018516756022547286), Circle(x=0.6379088284879326, y=0.7690965724631914, r=0.0014085211688127694), Circle(x=0.07213390677064563, y=-0.9969650230993562, r=0.0010714251894759087), Circle(x=-0.6842523100838022, y=-0.7289071056215444, r=0.000815005100428193), Circle(x=-0.6843349897161745, y=0.7287749660796549, r=0.0006199530496841137), Circle(x=-0.17762853730071212, y=0.9838848899039228, r=0.0004715820595609831), Circle(x=-0.6851032171052384, y=0.7282938748064527, r=0.00035872013052132485), Circle(x=-0.6850662861629557, y=-0.7282949943196, r=0.00027286901490915585), Circle(x=-0.06988362735558888, y=-0.6499857099214075, r=0.00020756431814764528), Circle(x=0.9576159033083701, y=-0.287901726864696, r=0.00015788874446752475), Circle(x=-0.6854133856566726, y=-0.7281474087016567, r=0.00012010183567196199)]
-        initial_guess_find_all = [Circle(x=-0.473348414042532, y=0.0, r=0.6600893225800246), Circle(x=0.5343362143380699, y=0.24656189453562138, r=0.5362953873992997), Circle(x=0.30887579035559376, y=-0.6042218420332874, r=0.4357179137841558), Circle(x=-0.02083056251695819, y=0.7816097718162912, r=0.3540028589711956), Circle(x=-0.2825993952802953, y=-0.8047699691777478, r=0.28761274254576497), Circle(x=0.8234521696950104, y=-0.3638099536002596, r=0.2336735073696885), Circle(x=-0.4819141385282013, y=0.7828925135194501, r=0.18985010039241704), Circle(x=0.42451191741767436, y=0.8624873992880191, r=0.15424538718455608), Circle(x=-0.6396626599933831, y=-0.717876149449555, r=0.12531802415978022), Circle(x=-0.7141108348709663, y=0.6536564578703262, r=0.10181573313774724), Circle(x=0.011497666689047358, y=-0.9794447962833417, r=0.08272108967469649), Circle(x=0.9669304188180297, y=-0.12604033783935764, r=0.06720747831488413), Circle(x=-0.7659661432432211, y=-0.6078147256378162, r=0.05460330804645187), Circle(x=0.7662631254351678, y=-0.6220325194407933, r=0.04436293883318356), Circle(x=0.5917477912367785, y=0.7891413138234734, r=0.036043060619010824), Circle(x=0.17794651711818557, y=-0.1753295451104614, r=0.029283502242055205), Circle(x=-0.8093312265078569, y=0.5775022342433332, r=0.023791639467713618), Circle(x=0.9907735862946158, y=-0.04833171432876694, r=0.019329727157728852), Circle(x=-0.3481236078443935, y=0.9329748969841338, r=0.01570460717931126), Circle(x=-0.8183997876874411, y=-0.5694315222410222, r=0.012759346505201944), Circle(x=0.10159215419301831, y=-0.9905356984107909, r=0.01036644351437696), Circle(x=0.29195174733693935, y=0.9523927772427866, r=0.008422308391182555), Circle(x=0.7424365276740426, y=-0.6653533506288015, r=0.006842778676969178), Circle(x=0.998409169436137, y=-0.025644201706744713, r=0.00555947584049575), Circle(x=0.6293945722912323, y=0.7760138333188272, r=0.004516845141445621), Circle(x=-0.8279175154834418, y=0.5582362778620299, r=0.0036697506414528525), Circle(x=-0.8279993535205726, y=-0.557918318322183, r=0.0029815212496157157), Circle(x=0.029031208725864243, y=0.429970752047181, r=0.0024223632149542244), Circle(x=-0.12579272532573907, y=-0.5623803944100751, r=0.0019680703419167863), Circle(x=0.2077477551096776, y=-0.17976048763837638, r=0.0015989760936019044), Circle(x=-0.8311161830993191, y=-0.5554576959452511, r=0.001299102218785689), Circle(x=-0.8312157917442254, y=0.5552239664973123, r=0.0010554670464473352), Circle(x=0.7397890993915478, y=-0.6722214140176546, r=0.0008575235035604522), Circle(x=0.11203009116679852, y=-0.9933994962653329, r=0.0006967025276949609), Circle(x=-0.8322754377350393, y=0.554102013467376, r=0.0005660421085616682), Circle(x=-0.8321747928137314, y=-0.5541625610606129, r=0.0004598858995459575), Circle(x=0.7392365419924447, y=-0.673171068294957, r=0.00037363835199224034), Circle(x=0.11294993185685866, y=-0.9934815223719788, r=0.00030356577189539634), Circle(x=0.6334732851191984, y=0.7736354184970712, r=0.00024663468665647476), Circle(x=0.9997223780252019, y=-0.02007338565641066, r=0.00020038052472891446), Circle(x=-0.12473831665444662, y=-0.560616794077429, r=0.00016280092323980904), Circle(x=-0.8326245762235442, y=-0.5538059164646535, r=0.000132269044826539), Circle(x=0.7390719884053104, y=-0.6736009652364928, r=0.00010746315113676814)]
-
-        return lambda p, pk: place_algorithm_11(p, pk, initial_circles=12, initial_guess=initial_guess_find_one if pk == default_pk else initial_guess_find_all)
-    else:
-        raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, 5.75, 6, 6.5, or 10.")
-
-def parse_args() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--algorithm', type=float, required=True, choices=[4, 5, 5.5, 5.75, 6, 6.5, 10, 11],
-                       help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment, 10: Reordered Chords + Square Fill')
-    parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
-    parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
-    parser.add_argument('--debug', action='store_true', help='Enable debug output')
-
-    args = parser.parse_args()
-    
-    # Validate precision after parsing
-    if args.precision < 1:
-        parser.error('Precision must be at least 1')
-        
-    return args
-
-def create_evaluator(
-    place_algorithm: Callable[[float, PkFunction], list[Circle]],
-    pk: PkFunction
-) -> Callable[[float], tuple[bool, list[Circle]]]:
-    """Create an evaluation function for binary search."""
-    def evaluate(p: float) -> tuple[bool, list[Circle]]:
-        circles = place_algorithm(p, pk)
-        return covers_unit_circle(circles), circles
-    return evaluate
-
-def run_search(evaluator: Callable[[float], tuple[bool, list[Circle]]], debug: bool = False) -> tuple[float, list[Circle]]:
-    """Run binary search with the given evaluator."""
-    return binary_search(0.5, 1, evaluator, debug=debug)
-    # return binary_search(0.76, 0.7606738281250001, evaluator, debug=debug)
-
-def calculate_result(p: float, c_multiplier: int) -> float:
-    """Calculate final result using p and c_multiplier."""
-    return c_multiplier / math.log2(1 / p)
-
-def run_simulation(
-    algorithm: float = 4.0,
-    find_all: bool = False,
-    precision: int = 5,
-    debug: bool = False
-) -> tuple[float, float, float, list[Circle], float]:
-    """
-    Run the circle packing simulation with the specified parameters.
-    
-    Args:
-        algorithm (float): Algorithm choice (4, 5, 5.5, 6, or 6.5)
-        find_all (bool): Whether to use p^((k+1)/2) for radius calculation
-        precision (int): Decimal precision for calculations (minimum 1)
-        debug (bool): Enable debug output
-    
-    Returns:
-        tuple[float, float, list[Circle], float]: (p value, c value, list of circles, CPU time)
-    """
-    if precision < 1:
-        raise ValueError('Precision must be at least 1')
-    
-    calc_precision = (precision + 2) * 2
-    PRECISION.set_precision(calc_precision)
-    
-    pk, c_multiplier = get_configuration(argparse.Namespace(find_all=find_all))
-    place_algorithm = get_placement_algorithm(algorithm)
-    evaluator = create_evaluator(place_algorithm, pk)
-    
-    start_time = time.time()
-    p, circles = run_search(evaluator, debug=debug)
-    elapsed_time = time.time() - start_time
-    
-    c = calculate_result(p, c_multiplier)
-    ct = get_distance_traveled(circles, debug=debug)
-    return p, c, ct, circles, elapsed_time
-
-def main() -> None:
-    """Main execution function for command-line usage."""
-    args = parse_args()
-    
-    p, c, ct, circles, elapsed_time = run_simulation(
-        algorithm=args.algorithm,
-        find_all=args.find_all,
-        precision=args.precision,
-        debug=args.debug
-    )
-
-    # Format output with requested precision
-    p_str = f"{p:.{args.precision}f}"
-    c_str = f"{c:.{args.precision}f}"
-    ct_str = f"{ct:.{args.precision}f}"
-    print(f"p = {p_str}, c = {c_str}, ct = {ct_str}")
-    print(f"CPU Time: {elapsed_time:.3f} seconds")
-
-    print(circles)
-    
-    draw_circles(circles,
-        title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
-        p=p,
-        c=c,
-        ct=ct,
-        cpu_time=elapsed_time)
+import random
+from typing import NamedTuple
+
+from algorithms import ALGORITHMS
+from src.geometry_types import PRECISION, Circle
+import multiprocessing
+from pathlib import Path
+import csv
+import time
+import os
+
+import matplotlib.pyplot as plt
+from matplotlib.patches import Circle as plt_Circle
+
+DATA_DIRECTORY = Path(__file__).parent / "data"
+DATA_DIRECTORY.mkdir(exist_ok=True)
+
+class SimulationResult(NamedTuple):
+	P: int # total number of probes
+	D: float # total distance traveled
+	num_responses: int # number of POI responses
+
+def save_simulation_results(algorithm: int, n: float, results: list[SimulationResult]):
+	with open(DATA_DIRECTORY / f"algorithm_{algorithm}.csv", "a", newline="") as f:
+		writer = csv.writer(f)
+		writer.writerows([(n, result.P, result.D, result.num_responses) for result in results])
+
+class Position(NamedTuple):
+	x: float
+	y: float
+
+# function that draws:
+# POI with X
+# delta with Δ
+# probes with circles
+# given the search area
+def draw_step(probes: list[Circle], search_area: Circle, poi: Position, delta: Position):	
+	fig, ax = plt.subplots(figsize=(10, 10)) # type: ignore
+	
+	# Draw search area
+	search_circle = plt_Circle((search_area.x, search_area.y), search_area.r, 
+							   fill=False, color='blue', linestyle='--', alpha=0.5)
+	ax.add_patch(search_circle)
+	
+	# Draw probes
+	for probe in probes:
+		# Scale and translate probe according to search area
+		probe_circle = plt_Circle((probe.x, probe.y), probe.r,
+								  fill=False, color='green', alpha=0.7)
+		ax.add_patch(probe_circle)
+	
+	# Draw POI with X
+	ax.plot(poi.x, poi.y, 'rx', markersize=10, markeredgewidth=3, label='POI') # type: ignore
+	
+	# Draw delta with Δ
+	ax.plot(delta.x, delta.y, 'bo', markersize=8, label='Delta') # type: ignore
+	ax.text(delta.x, delta.y, 'Δ', color='white', ha='center', va='center', fontweight='bold') # type: ignore
+	
+	# Set limits and labels
+	max_radius = search_area.r * 1.2
+	ax.set_xlim(search_area.x - max_radius, search_area.x + max_radius)
+	ax.set_ylim(search_area.y - max_radius, search_area.y + max_radius)
+	ax.set_aspect('equal')
+	ax.set_title('Delta Search Visualization') # type: ignore
+	ax.legend() # type: ignore
+	ax.grid(True) # type: ignore
+	
+	plt.show() # type: ignore
+	
+
+def get_random_poi_position(n: float):
+	r: float = random.uniform(0, n)
+	theta = random.uniform(0, 2 * math.pi)
+
+	return Position(r * math.cos(theta), r * math.sin(theta))
+
+def probe_query(probe: Circle, poi: Position):
+	return math.sqrt((probe.x - poi.x)**2 + (probe.y - poi.y)**2) < probe.r + PRECISION.epsilon
+
+def scale_translate_and_rotate_probes(placement: list[Circle], search_area: Circle, delta: Position) -> list[Circle]:
+	# # first, scale and translate the probes
+	# scaled_and_translated_probes = [Circle(search_area.x + probe.x * search_area.r, search_area.y + probe.y * search_area.r, probe.r * search_area.r) for probe in placement]
+
+	# first, rotate the probes, such that the delta is as close to the first probe as possible
+	# find the angle between the first probe and the delta
+	first_x, first_y, _ = placement[0]
+	first_probe_angle = math.atan2(first_y, first_x)
+
+	origin_x, origin_y, _ = search_area
+	delta_angle = math.atan2(delta.y - origin_y, delta.x - origin_x)
+
+	angle = delta_angle - first_probe_angle
+
+	# next, rotate the probes
+	rotated_probes = [Circle(
+		x=probe.x * math.cos(angle) - probe.y * math.sin(angle),
+		y=probe.x * math.sin(angle) + probe.y * math.cos(angle),
+		r=probe.r
+	) for probe in placement]
+
+	# finally, scale and translate the probes
+	scaled_and_translated_probes = [Circle(
+		x=search_area.x + probe.x * search_area.r,
+		y=search_area.y + probe.y * search_area.r,
+		r=probe.r * search_area.r
+	) for probe in rotated_probes]
+	
+	return scaled_and_translated_probes
+
+def find_poi(placement: list[Circle], search_area: Circle, poi: Position, delta: Position = Position(0, 0)) -> SimulationResult:
+	# delta distance is delta distance from center
+	if search_area.r < 1.0 + PRECISION.epsilon:
+		# if delta is far from search area, delta must travel to search area
+		return SimulationResult(0, math.sqrt((delta.x - search_area.x)**2 + (delta.y - search_area.y)**2), 0)
+	
+	probes = scale_translate_and_rotate_probes(placement, search_area, delta)
+
+	num_probes_done = 0
+	total_distance_traveled = 0
+	num_responses = 0
+	found_poi = False
+
+	# draw_step(probes, search_area, poi, delta)
+
+	for probe in probes:
+		if probe == probes[-1]:
+			# last probe does not need to be performed
+			found_poi = True
+		else:
+			total_distance_traveled += math.sqrt((probe.x - delta.x)**2 + (probe.y - delta.y)**2)
+			delta = Position(probe.x, probe.y)
+
+			if probe_query(probe, poi):
+				found_poi = True
+				num_responses += 1
+
+			num_probes_done += 1
+
+		if found_poi:
+			# print probe index
+			# print(num_probes_done, end=', ')
+
+			remaining_work = find_poi(placement, probe, poi, delta)
+			num_probes_done += remaining_work.P
+			total_distance_traveled += remaining_work.D
+			num_responses += remaining_work.num_responses
+
+			
+			return SimulationResult(num_probes_done, total_distance_traveled, num_responses)
+	
+	# raise error
+	raise Exception("POI not found")
+
+def simulate_algorithm(placement: list[Circle], n: float) -> SimulationResult:
+	return find_poi(placement, Circle(0, 0, n), get_random_poi_position(n))
+
+def simulate_specific_algorithm(algorithm: int, n: float, num_simulations: int, batch_size: int = 2 ** 13):
+	placement = ALGORITHMS[algorithm]
+	PRECISION.set_precision(10 if algorithm < 7 else 2)
+	
+	total_batches = num_simulations // batch_size
+	
+	for i in range(total_batches):
+		batch_results = [simulate_algorithm(placement, n) for _ in range(batch_size)]
+		save_simulation_results(algorithm, n, batch_results)
+		
+		# Report progress periodically (every ~1% or every 10 batches, whichever is less frequent)
+		report_interval = max(1, total_batches // 100)
+		if i % report_interval == 0 or i == total_batches - 1:
+			percent_complete = (i + 1) / total_batches * 100
+			print(f"Algorithm {algorithm}: {percent_complete:.1f}% complete ({i+1}/{total_batches} batches)")
+	
+	# run the remaining simulations
+	remaining_simulations = num_simulations % batch_size
+	if remaining_simulations > 0:
+		remaining_results = [simulate_algorithm(placement, n) for _ in range(remaining_simulations)]
+		save_simulation_results(algorithm, n, remaining_results)
+
+def run_algorithm_process(algorithm: int, n: float, num_simulations: int, batch_size: int) -> tuple[int, float]:
+	"""Worker function for multiprocessing that runs a single algorithm's simulations"""
+	# Seed the random number generator with process-specific seed for independence
+	process_seed = int(time.time() * 1000) % 100000 + os.getpid() + algorithm * 1000
+	random.seed(process_seed)
+	
+	start_time = time.time()
+	print(f"Process for algorithm {algorithm} started (PID: {os.getpid()})")
+	
+	simulate_specific_algorithm(algorithm, n, num_simulations, batch_size)
+	
+	elapsed_time = time.time() - start_time
+	print(f"Algorithm {algorithm} completed in {elapsed_time:.2f} seconds")
+	return algorithm, elapsed_time
 
 if __name__ == '__main__':
-    main()
-    exit(0)
-    # # p = 2 ** (-1 / 2.5)
+	# Parameters for the simulations
+	n = 2**20
+	num_simulations = 2**22
 
-    PRECISION.set_precision(8)
-    print(PRECISION.epsilon)
-    p = 0.761484375
-    # p = 0.665
-    # p = 0.66
-    # initial_circles = 2
-    # initial_circles = int(sys.argv[1]) if len(sys.argv) > 1 else 12
-    # print(initial_circles)
-    # x0 = [Circle(x=-0.4484065647207323, y=0.0, r=0.76), Circle(x=0.5601502470074224, y=0.3576865370211815, r=0.5776), Circle(x=0.5085024698409785, y=-0.5423395822010191, r=0.43897600000000003), Circle(x=-0.08623281286331508, y=-0.8548665419624422, r=0.33362176), Circle(x=0.005611148628313943, y=0.845671058086685, r=0.2535525376), Circle(x=-0.36929874870667445, y=0.8483471293981908, r=0.19269992857600002), Circle(x=0.9109084345662557, y=-0.20157729210020672, r=0.14645194571776002), Circle(x=-0.504228918956284, y=-0.8149227497911052, r=0.1113034787454976), Circle(x=0.3021577501867461, y=0.9262540702371836, r=0.08459064384657819), Circle(x=-0.6012817587761183, y=0.77304297986932, r=0.06428888932339942), Circle(x=0.26754890384408, y=-0.9408068775967778, r=0.048859555885783564), Circle(x=-0.6314869169678121, y=-0.7542786634108117, r=0.037133262473195504), Circle(x=0.9853587681711702, y=-0.05326624279204786, r=0.028221279479628585), Circle(x=0.9207169673688986, y=-0.3621657909073574, r=0.021448172404517726), Circle(x=-0.6695299587329187, y=0.7338448039781391, r=0.01630061102743347), Circle(x=-0.674232691709327, y=-0.7313005216874521, r=0.012388464380849439), Circle(x=-0.42246009690914194, y=-0.8990886224749783, r=0.009415232929445573), Circle(x=0.3923821065912721, y=0.9148484785610943, r=0.007155577026378636), Circle(x=0.3210642414130638, y=-0.9432280565483033, r=0.005438238540047763), Circle(x=-0.21732469079958655, y=0.9729726424290217, r=0.0041330612904363), Circle(x=0.9972202401594649, y=-0.023752180701944764, r=0.003141126580731588), Circle(x=-0.687473258757824, y=0.7234982981943359, r=0.002387256201356007), Circle(x=-0.6882868713814427, y=-0.7230054226437646, r=0.0018143147130305654), Circle(x=0.22786445607561054, y=0.9715703546152582, r=0.0013788791819032296), Circle(x=0.9205916643858245, y=-0.38595229982605295, r=0.0010479481782464546)]
-    # x0 = [Circle(x=-0.4830411, y=0, r=0.66), Circle(x=0.5318464, y=0.2416313, r=0.5361865), Circle(x=0.2861341, y=-0.6065730, r=0.4356), Circle(x=-0.03615046, y=0.7759997, r=0.3538831), Circle(x=-0.3231259, y=-0.7974621, r=0.287496), Circle(x=0.8054224, y=-0.3762863, r=0.2335629), Circle(x=-0.5249223, y=0.7555362, r=0.1897474), Circle(x=0.4046515, y=0.8577455, r=0.1541515), Circle(x=-0.6913100, y=-0.6914375, r=0.1252333), Circle(x=-0.01136641, y=-0.9794021, r=0.1017400), Circle(x=0.9682765, y=-0.1338024, r=0.08265395), Circle(x=-0.7370363, y=0.6390875, r=0.06714839), Circle(x=0.7482672, y=-0.6419571, r=0.05455161), Circle(x=0.5791013, y=0.7920574, r=0.04431794), Circle(x=-0.3782377, y=0.9100824, r=0.03600406), Circle(x=0.1705255, y=-0.1736458, r=0.02924984), Circle(x=-0.7942498, y=-0.5902347, r=0.02376268), Circle(x=-0.8009848, y=0.5868187, r=0.01930489), Circle(x=0.9929994, y=-0.04188113, r=0.01568337), Circle(x=0.2742226, y=0.9559963, r=0.01274123), Circle(x=0.62783818683958070305806131727877072989940643310546875, y=0.77326822321228105838741839761496521532535552978515625, r=0.01035102), Circle(x=0.71628027964776486147258083292399533092975616455078125, y=-0.69301439361814309858544902454013936221599578857421875, r=0.008409211), Circle(x=-0.81731057784901739449168189821648411452770233154296875, y=-0.57198732142082653329140384812490083277225494384765625, r=0.006831675), Circle(x=-0.81871758378737402583880111706093885004520416259765625, y=0.5706265440066895511250777417444624006748199462890625, r=0.005550079), Circle(x=0.025271821720933902721828445692153763957321643829345703125, y=0.424918884588280476588550982341985218226909637451171875, r=0.004508906), Circle(x=-0.70887689170958678719358658781857229769229888916015625, y=0.70214588860013826820960503027890808880329132080078125, r=0.003663052), Circle(x=0.99854446726559464853067993317381478846073150634765625, y=-0.024729054068863824678015106428574654273688793182373046875, r=0.002975878), Circle(x=0.6389450658617759071233876966289244592189788818359375, y=0.76799714141834407588049771220539696514606475830078125, r=0.002417615), Circle(x=-0.6115306319420650282836504629813134670257568359375, y=-0.7895569141375948785110949756926856935024261474609375, r=0.001964079), Circle(x=-0.823424844433121361220173639594577252864837646484375, y=-0.56623809834514970962260349551797844469547271728515625, r=0.001595626), Circle(x=-0.8237548305303843410030140148592181503772735595703125, y=0.5659288806692226447836446823203004896640777587890625, r=0.001296292), Circle(x=0.71190112698686214276477812745724804699420928955078125, y=-0.701426679930230445592087562545202672481536865234375, r=0.001053113)]
-    # circles = place_algorithm_11(p, initial_circles=initial_circles, pk=default_pk, initial_guess=x0)
-    # # circles = [Circle(x=-0.4660305, y=0, r=0.7578583), Circle(x=0.6219811, y=0.2293612, r=0.5743492), Circle(x=0.3799721, y=-0.6418602, r=0.4352753), Circle(x=0.09652912, y=0.8269215, r=0.3298770), Circle(x=-0.1954859, y=-0.8560651, r=0.2500000), Circle(x=-0.3625750, y=0.8458253, r=0.1894646), Circle(x=0.8360550, y=-0.3959104, r=0.1435873), Circle(x=-0.5261192, y=-0.8089158, r=0.1088188), Circle(x=0.480869862587108898299703696466167457401752471923828125, y=0.83068605528566052953465259633958339691162109375, r=0.08246926), Circle(x=-0.59274082610672007565000285467249341309070587158203125, y=0.77314890488008958246979318573721684515476226806640625, r=0.06250001), Circle(x=0.05955299818111030318856791154757956974208354949951171875, y=-0.97322066399223505772653197709587402641773223876953125, r=0.04736615), Circle(x=0.945071667223251754563762006000615656375885009765625, y=-0.267485111240606254767726568388752639293670654296875, r=0.03589683), Circle(x=-0.64508836223532295406357661704532802104949951171875, y=-0.7483326183722491808936183588230051100254058837890625, r=0.02720471), Circle(x=0.8187915289415081954160768873407505452632904052734375, y=-0.55365355153100981322467077916371636092662811279296875, r=0.02061732), Circle(x=-0.66262275981678431246990612635272555053234100341796875, y=0.7393680566860967307007967974641360342502593994140625, r=0.01562501), Circle(x=0.57264705977377372558834167648456059396266937255859375, y=0.80989263449354031987326152375317178666591644287109375, r=0.01184154), Circle(x=-0.20882603562105661598735650841263122856616973876953125, y=0.97027272385723339898078165788319893181324005126953125, r=0.008974209), Circle(x=0.424209419172794033325857299132621847093105316162109375, y=0.89909879687231797351643081128713674843311309814453125, r=0.006801179), Circle(x=0.110286511239986950716485125667531974613666534423828125, y=-0.98936943284950518151532605770626105368137359619140625, r=0.005154330), Circle(x=-0.675947897554812104914390147314406931400299072265625, y=-0.732007983290130948006435573915950953960418701171875, r=0.003906252), Circle(x=0.9684947036287188115721846770611591637134552001953125, y=-0.233445824486877284709152036157320253551006317138671875, r=0.002960385), Circle(x=-0.446946708195753383829895710732671432197093963623046875, y=-0.8895709389850099402252681102254427969455718994140625, r=0.002243553), Circle(x=-0.55448923632514379722380226667155511677265167236328125, y=0.82695865409689961467165630892850458621978759765625, r=0.001700295), Circle(x=-0.446946708195759379034228686577989719808101654052734375, y=-0.88957093898502126450011928682215511798858642578125, r=0.001288583)]
-    # # circles = [Circle(x=-0.4621705, y=0, r=0.7578583), Circle(x=0.6256425, y=0.2326335, r=0.5743492), Circle(x=0.3799522, y=-0.6394088, r=0.4352753), Circle(x=0.09435549, y=0.8280994, r=0.3298770), Circle(x=-0.1911341, y=-0.8601548, r=0.2500000), Circle(x=-0.3621675, y=0.8498134, r=0.1894646), Circle(x=0.8355603, y=-0.3944838, r=0.1435873), Circle(x=-0.52249459542098286579658861228381283581256866455078125, y=-0.79951779020669666575571454814053140580654144287109375, r=0.1088188), Circle(x=0.478108268017147286510493131572729907929897308349609375, y=0.83226584615214205253863610778353177011013031005859375, r=0.08246926), Circle(x=-0.5923398972211406654508891733712516725063323974609375, y=0.77278031110463363262397251673974096775054931640625, r=0.06250001), Circle(x=0.06440370617754369308993744880353915505111217498779296875, y=-0.9739136913108425996910000321804545819759368896484375, r=0.04736615), Circle(x=0.945172075466456984571550492546521127223968505859375, y=-0.266710364048800219194390592747367918491363525390625, r=0.03589683), Circle(x=-0.64607838948470541762247876249602995812892913818359375, y=-0.7476118730071712459306354503496550023555755615234375, r=0.02720471), Circle(x=0.81929930229130787378011291366419754922389984130859375, y=-0.5526431474161856982618701294995844364166259765625, r=0.02061732), Circle(x=-0.66298605878645922029335224578971974551677703857421875, y=0.73858704278622078209792789493803866207599639892578125, r=0.01562501), Circle(x=0.569612049146654531028843848616816103458404541015625, y=0.81232234708392148103683894078130833804607391357421875, r=0.01184154), Circle(x=-0.446152987284383739652326994473696686327457427978515625, y=-0.8865485790819789269079365112702362239360809326171875, r=0.008974209), Circle(x=-0.2089098823704004515011689591119647957384586334228515625, y=0.971964861975724403464482747949659824371337890625, r=0.006801179), Circle(x=0.421736682759198122649735296363360248506069183349609375, y=0.90055484730787005442920190034783445298671722412109375, r=0.005154330), Circle(x=-0.67710409240092073179795306714368052780628204345703125, y=-0.7307063094435901628997953594080172479152679443359375, r=0.003906252), Circle(x=0.11458748311946047315768026919613475911319255828857421875, y=-0.9894749187324034522816873504780232906341552734375, r=0.002960385), Circle(x=0.96865022960213431613141210618778131902217864990234375, y=-0.2327812901864864947309996523472364060580730438232421875, r=0.002243553), Circle(x=-0.55390670905321937045329150350880809128284454345703125, y=0.8267531015774716163235780186369083821773529052734375, r=0.001700295), Circle(x=0.42173668275920039860693577793426811695098876953125, y=0.90055484730787405123209055091137997806072235107421875, r=0.001288583)]
-
-    # # works for p = 0.67, find all
-    # circles = [Circle(x=-0.4908906, y=0, r=0.67), Circle(x=0.5804569, y=0.2405622, r=0.5484186), Circle(x=0.208870012530215920509846228014794178307056427001953125, y=-0.624393270985229786873560442472808063030242919921875, r=0.4489), Circle(x=-0.0687488043892642564092199108927161432802677154541015625, y=0.77310537179094873661000519859953783452510833740234375, r=0.3674405), Circle(x=-0.393608215151188989278097096757846884429454803466796875, y=-0.791659521973363755620312076644040644168853759765625, r=0.300763), Circle(x=0.7684885770609046762302796196308918297290802001953125, y=-0.42347591574216758569804142098291777074337005615234375, r=0.2461851), Circle(x=-0.5598258887884235424081680321251042187213897705078125, y=0.74140036004681342252098374956403858959674835205078125, r=0.2015112), Circle(x=0.3929231971960387426179295289330184459686279296875, y=0.8388412309319217552427971895667724311351776123046875, r=0.1649440), Circle(x=-0.719611742351108585324936939286999404430389404296875, y=-0.6575628068270826798169537141802720725536346435546875, r=0.1350125), Circle(x=0.9519120239052198950702177171478979289531707763671875, y=-0.2013058037931811650178559602863970212638378143310546875, r=0.1105125), Circle(x=0.6797276989002438707387909744284115731716156005859375, y=-0.69765922557720283503357450172188691794872283935546875, r=0.09045838), Circle(x=-0.10946213991471363813356987293445854447782039642333984375, y=-0.9722348976327073177827742256340570747852325439453125, r=0.07404338), Circle(x=-0.7605164806089919071752092349925078451633453369140625, y=0.62843717938068355266523212776519358158111572265625, r=0.06060712), Circle(x=0.1816497487910462005356038162062759511172771453857421875, y=-0.158394717928385109217970239114947617053985595703125, r=0.04960906), Circle(x=0.57507623236683491629861464389250613749027252197265625, y=0.80242357988825607773009096490568481385707855224609375, r=0.04060677), Circle(x=0.05021068790505144041613760919062769971787929534912109375, y=0.413950344752257615166257664895965717732906341552734375, r=0.03323807), Circle(x=0.26069828357698343612725011553266085684299468994140625, y=0.956030152369351515773132632602937519550323486328125, r=0.02720653), Circle(x=-0.421038711816131117071648759520030580461025238037109375, y=0.8995030400165087147712483783834613859653472900390625, r=0.02226951), Circle(x=0.539648777974118143418991166981868445873260498046875, y=-0.31223545371566785444628067125449888408184051513671875, r=0.01822838), Circle(x=0.614181769376461073051132188993506133556365966796875, y=0.78848548708470478363352640371886081993579864501953125, r=0.01492057), Circle(x=-0.03952937922512121671214657681048265658318996429443359375, y=-0.9988086069087371843266964788199402391910552978515625, r=0.01221301)]
-
-    # # not quite 0.66, find all ()
-    # circles = [Circle(x=-0.4833120005694204, y=0.0, r=0.66), Circle(x=0.5317358816274448, y=0.24214677801153794, r=0.5361865347059734), Circle(x=0.2866995324856751, y=-0.6057168722596091, r=0.43560000000000004), Circle(x=-0.03634378304984366, y=0.7760127386996647, r=0.3538831129059425), Circle(x=-0.3222367103102662, y=-0.7973038313796376, r=0.28749600000000003), Circle(x=0.806303934058124, y=-0.37620487369057065, r=0.23356285451792205), Circle(x=-0.5250033675341838, y=0.7553755491823693, r=0.18974736000000003), Circle(x=0.40442850342336056, y=0.8582933498770591, r=0.15415148398182857), Circle(x=-0.691059950219828, y=-0.6915931103271704, r=0.12523325760000004), Circle(x=-0.01074808016882956, y=-0.9791293856616984, r=0.10173997942800685), Circle(x=0.968105880099089, y=-0.13307310577236536, r=0.08265395001600002), Circle(x=-0.7372260813132544, y=0.6392121051535343, r=0.06714838642248452), Circle(x=0.7483569093084873, y=-0.6421822341018402, r=0.05455160701056002), Circle(x=0.5787911464684424, y=0.792475355647242, r=0.04431793503883979), Circle(x=-0.3783609154943018, y=0.9100056949885919, r=0.03600406062696961), Circle(x=0.17023035363473682, y=-0.17308240345680925, r=0.02924983712563426), Circle(x=-0.7940488543707009, y=-0.5903884590478149, r=0.023762680013799945), Circle(x=-0.8011533708056912, y=0.5869624229300081, r=0.019304892502918614), Circle(x=0.9929091004154476, y=-0.041200121839168505, r=0.015683368809107964), Circle(x=0.2737850848818797, y=0.9561115144916119, r=0.012741229051926286), Circle(x=0.6280379351115938, y=0.7739768544046264, r=0.010351023414011257), Circle(x=0.7153594036835527, y=-0.6940910186896739, r=0.008409211174271349), Circle(x=-0.8174807581765395, y=-0.5724208346499913, r=0.006831675453247431), Circle(x=-0.8187441103697091, y=0.5706992330471568, r=0.005550079375019091), Circle(x=0.02496122751359406, y=0.4249237094247865, r=0.004508905799143304), Circle(x=-0.7089524993528952, y=0.702159274516865, r=0.0036630523875126), Circle(x=0.9985467997821961, y=-0.024052259357123327, r=0.002975877827434581), Circle(x=-0.6108657412256391, y=-0.7897111771875888, r=0.0024176145757583162), Circle(x=0.6386706275767347, y=0.7683935632960457, r=0.0019640793661068233), Circle(x=-0.8232931912398008, y=-0.5664482596985936, r=0.0015956256200004887), Circle(x=-0.8237037371758822, y=0.5660758028031595, r=0.0012962923816305036), Circle(x=0.09069262756666946, y=-0.9953286259051966, r=0.0010531129092003226)]
-
-    # works for 0.66008, find all (precision 8)
-    circles = [Circle(x=-0.473348414042532, y=0.0, r=0.6600893225800246), Circle(x=0.5343362143380699, y=0.24656189453562138, r=0.5362953873992997), Circle(x=0.30887579035559376, y=-0.6042218420332874, r=0.4357179137841558), Circle(x=-0.02083056251695819, y=0.7816097718162912, r=0.3540028589711956), Circle(x=-0.2825993952802953, y=-0.8047699691777478, r=0.28761274254576497), Circle(x=0.8234521696950104, y=-0.3638099536002596, r=0.2336735073696885), Circle(x=-0.4819141385282013, y=0.7828925135194501, r=0.18985010039241704), Circle(x=0.42451191741767436, y=0.8624873992880191, r=0.15424538718455608), Circle(x=-0.6396626599933831, y=-0.717876149449555, r=0.12531802415978022), Circle(x=-0.7141108348709663, y=0.6536564578703262, r=0.10181573313774724), Circle(x=0.011497666689047358, y=-0.9794447962833417, r=0.08272108967469649), Circle(x=0.9669304188180297, y=-0.12604033783935764, r=0.06720747831488413), Circle(x=-0.7659661432432211, y=-0.6078147256378162, r=0.05460330804645187), Circle(x=0.7662631254351678, y=-0.6220325194407933, r=0.04436293883318356), Circle(x=0.5917477912367785, y=0.7891413138234734, r=0.036043060619010824), Circle(x=0.17794651711818557, y=-0.1753295451104614, r=0.029283502242055205), Circle(x=-0.8093312265078569, y=0.5775022342433332, r=0.023791639467713618), Circle(x=0.9907735862946158, y=-0.04833171432876694, r=0.019329727157728852), Circle(x=-0.3481236078443935, y=0.9329748969841338, r=0.01570460717931126), Circle(x=-0.8183997876874411, y=-0.5694315222410222, r=0.012759346505201944), Circle(x=0.10159215419301831, y=-0.9905356984107909, r=0.01036644351437696), Circle(x=0.29195174733693935, y=0.9523927772427866, r=0.008422308391182555), Circle(x=0.7424365276740426, y=-0.6653533506288015, r=0.006842778676969178), Circle(x=0.998409169436137, y=-0.025644201706744713, r=0.00555947584049575), Circle(x=0.6293945722912323, y=0.7760138333188272, r=0.004516845141445621), Circle(x=-0.8279175154834418, y=0.5582362778620299, r=0.0036697506414528525), Circle(x=-0.8279993535205726, y=-0.557918318322183, r=0.0029815212496157157), Circle(x=0.029031208725864243, y=0.429970752047181, r=0.0024223632149542244), Circle(x=-0.12579272532573907, y=-0.5623803944100751, r=0.0019680703419167863), Circle(x=0.2077477551096776, y=-0.17976048763837638, r=0.0015989760936019044), Circle(x=-0.8311161830993191, y=-0.5554576959452511, r=0.001299102218785689), Circle(x=-0.8312157917442254, y=0.5552239664973123, r=0.0010554670464473352), Circle(x=0.7397890993915478, y=-0.6722214140176546, r=0.0008575235035604522), Circle(x=0.11203009116679852, y=-0.9933994962653329, r=0.0006967025276949609), Circle(x=-0.8322754377350393, y=0.554102013467376, r=0.0005660421085616682), Circle(x=-0.8321747928137314, y=-0.5541625610606129, r=0.0004598858995459575), Circle(x=0.7392365419924447, y=-0.673171068294957, r=0.00037363835199224034), Circle(x=0.11294993185685866, y=-0.9934815223719788, r=0.00030356577189539634), Circle(x=0.6334732851191984, y=0.7736354184970712, r=0.00024663468665647476), Circle(x=0.9997223780252019, y=-0.02007338565641066, r=0.00020038052472891446), Circle(x=-0.12473831665444662, y=-0.560616794077429, r=0.00016280092323980904), Circle(x=-0.8326245762235442, y=-0.5538059164646535, r=0.000132269044826539), Circle(x=0.7390719884053104, y=-0.6736009652364928, r=0.00010746315113676814)]
-
-    # works for p = 0.76067, find one (precision 8)
-    # circles = [Circle(x=-0.4652323341815545, y=0.0, r=0.7606738281250001), Circle(x=0.631835807925796, y=0.1903730016493503, r=0.5786246727943422), Circle(x=0.3697940080061505, y=-0.6721376127407843, r=0.4401446449020478), Circle(x=0.10868020756478226, y=0.809927396170051, r=0.3348065119663595), Circle(x=-0.2268096324157326, y=-0.8507008005358745, r=0.2546785511386293), Circle(x=-0.35105515226951206, y=0.8525717091300288, r=0.19372730843594976), Circle(x=0.8334512813738311, y=-0.45141887403603526, r=0.14736329332032652), Circle(x=0.5066812387531501, y=0.8205098167780042, r=0.11209540045508003), Circle(x=-0.5338611091463583, y=-0.8110230105587689, r=0.0852680373793706), Circle(x=-0.5799133384414544, y=0.7846827534845661, r=0.06486116441007143), Circle(x=0.024957526866519295, y=-0.980222221404978, r=0.049338190228454044), Circle(x=-0.6306083956676077, y=-0.7532837868134962, r=0.03753027003383761), Circle(x=0.9308286536798448, y=-0.3196167621135757, r=0.028548294177204232), Circle(x=-0.6507673738092681, y=0.7465983474462492, r=0.02171594021821259), Circle(x=0.621415822507479, y=0.774187508417866, r=0.01651874737712142), Circle(x=-0.1931950036775884, y=0.9728756836537937, r=0.012565378803184755), Circle(x=-0.6723563363140392, y=-0.7368493091564825, r=0.00955815479605928), Circle(x=-0.6750275665055643, y=0.7343573392884171, r=0.0072706381985297415), Circle(x=0.9514513927696395, y=-0.2968022336890622, r=0.0055305841913874726), Circle(x=-0.18133794081650303, y=0.9813524299000489, r=0.004206970648630317), Circle(x=0.9554387725018909, y=-0.2904077680461287, r=0.0032001324681031375), Circle(x=-0.6814658353052274, y=-0.7300857539758098, r=0.0024342570150191183), Circle(x=-0.682339445375422, y=0.7298309511390368, r=0.0018516756022547286), Circle(x=0.6379088284879326, y=0.7690965724631914, r=0.0014085211688127694), Circle(x=0.07213390677064563, y=-0.9969650230993562, r=0.0010714251894759087), Circle(x=-0.6842523100838022, y=-0.7289071056215444, r=0.000815005100428193), Circle(x=-0.6843349897161745, y=0.7287749660796549, r=0.0006199530496841137), Circle(x=-0.17762853730071212, y=0.9838848899039228, r=0.0004715820595609831), Circle(x=-0.6851032171052384, y=0.7282938748064527, r=0.00035872013052132485), Circle(x=-0.6850662861629557, y=-0.7282949943196, r=0.00027286901490915585), Circle(x=-0.06988362735558888, y=-0.6499857099214075, r=0.00020756431814764528), Circle(x=0.9576159033083701, y=-0.287901726864696, r=0.00015788874446752475), Circle(x=-0.6854133856566726, y=-0.7281474087016567, r=0.00012010183567196199)]
-
-    # circles = circles[:6]
-
-    # y1 = -0.649804
-    # y2 = -0.650198
-
-    # circles[4] = Circle(x=circles[4].x, y=circles[4].y + abs(y1 - y2), r=circles[4].r)
-
-    # circles = place_algorithm_6(0.8)
-
-    # not quite for p = 0.76, find one (0.000294)
-    # circles = [Circle(x=-0.4484065647207323, y=0.0, r=0.76), Circle(x=0.5601502470074224, y=0.3576865370211815, r=0.5776), Circle(x=0.5085024698409785, y=-0.5423395822010191, r=0.43897600000000003), Circle(x=-0.08623281286331508, y=-0.8548665419624422, r=0.33362176), Circle(x=0.005611148628313943, y=0.845671058086685, r=0.2535525376), Circle(x=-0.36929874870667445, y=0.8483471293981908, r=0.19269992857600002), Circle(x=0.9109084345662557, y=-0.20157729210020672, r=0.14645194571776002), Circle(x=-0.504228918956284, y=-0.8149227497911052, r=0.1113034787454976), Circle(x=0.3021577501867461, y=0.9262540702371836, r=0.08459064384657819), Circle(x=-0.6012817587761183, y=0.77304297986932, r=0.06428888932339942), Circle(x=0.26754890384408, y=-0.9408068775967778, r=0.048859555885783564), Circle(x=-0.6314869169678121, y=-0.7542786634108117, r=0.037133262473195504), Circle(x=0.9853587681711702, y=-0.05326624279204786, r=0.028221279479628585), Circle(x=0.9207169673688986, y=-0.3621657909073574, r=0.021448172404517726), Circle(x=-0.6695299587329187, y=0.7338448039781391, r=0.01630061102743347), Circle(x=-0.674232691709327, y=-0.7313005216874521, r=0.012388464380849439), Circle(x=-0.42246009690914194, y=-0.8990886224749783, r=0.009415232929445573), Circle(x=0.3923821065912721, y=0.9148484785610943, r=0.007155577026378636), Circle(x=0.3210642414130638, y=-0.9432280565483033, r=0.005438238540047763), Circle(x=-0.21732469079958655, y=0.9729726424290217, r=0.0041330612904363), Circle(x=0.9972202401594649, y=-0.023752180701944764, r=0.003141126580731588), Circle(x=-0.687473258757824, y=0.7234982981943359, r=0.002387256201356007), Circle(x=-0.6882868713814427, y=-0.7230054226437646, r=0.0018143147130305654), Circle(x=0.22786445607561054, y=0.9715703546152582, r=0.0013788791819032296), Circle(x=0.9205916643858245, y=-0.38595229982605295, r=0.0010479481782464546)]
-    # # # # # # for square in get_all_uncovered_squares(circles):
-    # # # # # #     print(square)
-    # # # # # squares = list(get_all_uncovered_squares(circles))
-    # print(len(circles[:-35]))
-    circles = add_intelligent_circles(circles[0].r, default_pk, circles)[0]
-
-    square = get_biggest_uncovered_square(circles)
-    print(circles, len(circles), get_empty_area(circles), covers_unit_circle(circles))
-    print(square)
+	# # for i, c in enumerate(ALGORITHMS[6]):
+	# # 	print(f"Circle {i}: {c.r} vs. {ALGORITHMS[6][0].r ** (i + 1)}")
 
 
-    draw_circles(circles, squares=[], title='Algorithm 11')
+	# poi = Position(x=492983.0212156907, y=-19415.937748734763)
+	# # poi = Position(x=0, y=0)
 
-    # circles = place_algorithm_5(0.79)
+	# result = find_poi(ALGORITHMS[6], Circle(0, 0, n), poi)
 
-    # circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
+	# print(result)
 
-    # circle_polygon_union = shapely.union_all(circle_polygons)
+	# # while True:
+	# # 	poi = get_random_poi_position(n)
+	# # 	result = find_poi(ALGORITHMS[6], Circle(0, 0, n), poi)
 
-    # unit_circle_polygon = PRECISION.unit_circle_polygon
+	# # 	if result.P == 78:
+	# # 		print(poi)
+	# # 		break
 
-    # difference_polygons = unit_circle_polygon.difference(circle_polygon_union)
-
-    # largest_geom = max(difference_polygons.geoms, key=lambda g: g.area) if hasattr(difference_polygons, 'geoms') else difference_polygons # type: ignore
-    
-    # new_circle = intelligently_minimize(largest_geom, 0.2)
-
-    # draw_circles([new_circle], polygons=[largest_geom])
+	# exit(0)
+	
+	# Setting a reasonable batch size - too large and it will use too much memory
+	# Too small and there will be too much overhead from file operations
+	batch_size = 2**16  # Adjust this based on available memory
+	
+	start_time_total = time.time()
+	
+	# Use spawn method for better cross-platform compatibility
+	multiprocessing.set_start_method('spawn', force=True)
+	
+	# Create a pool of worker processes
+	with multiprocessing.Pool() as pool:
+		# Map each algorithm to a separate process
+		jobs = []
+		for _ in range(num_simulations // batch_size):
+			for algorithm in range(1, 9):
+				jobs.append(pool.apply_async(run_algorithm_process, (algorithm, n, batch_size, batch_size))) # type: ignore
+		
+		# Wait for all jobs to complete and collect results
+		results: list[tuple[int, float]] = []
+		for job in jobs: # type: ignore
+			algorithm, elapsed_time = job.get() # type: ignore
+			results.append((algorithm, elapsed_time)) # type: ignore
+	
+	# Sort and display results
+	results.sort(key=lambda x: x[0])  # Sort by algorithm number
+	print("\nFinal Results:")
+	for algorithm, elapsed_time in results:
+		print(f"Algorithm {algorithm}: {elapsed_time:.2f} seconds")
+	
+	total_time = time.time() - start_time_total
+	print(f"\nAll simulations completed in {total_time:.2f} seconds")

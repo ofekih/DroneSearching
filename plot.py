@@ -1,7 +1,6 @@
 from matplotlib.axes import Axes
 import matplotlib.pyplot as plt
 import pandas as pd
-import numpy as np
 from pathlib import Path
 import math
 from typing import Callable, Literal
@@ -46,50 +45,50 @@ def plot_normalized_metrics(plot_type: Literal['error_bars', 'boxplot'] = 'boxpl
     figures_dir = get_figures_dir()
     
     # Create three separate figures
-    fig1, ax1 = plt.subplots(figsize=(8, 7))
-    fig2, ax2 = plt.subplots(figsize=(8, 7))
-    fig3, ax3 = plt.subplots(figsize=(8, 7))
+    fig1, ax1 = plt.subplots(figsize=(8, 7))  # type: ignore
+    fig2, ax2 = plt.subplots(figsize=(8, 7))  # type: ignore
+    fig3, ax3 = plt.subplots(figsize=(8, 7))  # type: ignore
     
     # Process data for each algorithm
-    algorithms: list[int] = sorted(df['algorithm'].unique())
+    algorithms: list[int] = sorted(df['algorithm'].unique())  # type: ignore
     
     # Plot P/log2 n
     if plot_type == 'error_bars':
         plot_metric_normalized(ax1, df, 'P', lambda n: math.log2(n), 'Normalized \\# of Probes $P/\\lceil \\log n \\rceil$', algorithms, show_minmax)
-        plt.figure(fig1.number)
-        plt.tight_layout()
-        plt.savefig(figures_dir / 'P.png', dpi=300, bbox_inches='tight')
+        plt.figure(fig1.number)  # type: ignore
+        plt.tight_layout()  # type: ignore
+        plt.savefig(figures_dir / 'P.png', dpi=300, bbox_inches='tight')  # type: ignore
     else:
         plot_box_whisker_normalized(ax1, df, 'P', lambda n: math.log2(n), 'Normalized \\# of Probes $P/\\lceil \\log n \\rceil$', algorithms)
-        plt.figure(fig1.number)
-        plt.tight_layout()
-        plt.savefig(figures_dir / 'P_box.png', dpi=300, bbox_inches='tight')
+        plt.figure(fig1.number)  # type: ignore
+        plt.tight_layout()  # type: ignore
+        plt.savefig(figures_dir / 'P_box.png', dpi=300, bbox_inches='tight')  # type: ignore
     
     # Plot D/n
     if plot_type == 'error_bars':
         plot_metric_normalized(ax2, df, 'D', lambda n: n, 'Normalized Distance Traveled $D/n$', algorithms, show_minmax)
-        plt.figure(fig2.number)
-        plt.tight_layout()
-        plt.savefig(figures_dir / 'D.png', dpi=300, bbox_inches='tight')
+        plt.figure(fig2.number)  # type: ignore
+        plt.tight_layout()  # type: ignore
+        plt.savefig(figures_dir / 'D.png', dpi=300, bbox_inches='tight')  # type: ignore
     else:
         plot_box_whisker_normalized(ax2, df, 'D', lambda n: n, 'Normalized Distance Traveled $D/n$', algorithms)
-        plt.figure(fig2.number)
-        plt.tight_layout()
-        plt.savefig(figures_dir / 'D_box.png', dpi=300, bbox_inches='tight')
+        plt.figure(fig2.number)  # type: ignore
+        plt.tight_layout()  # type: ignore
+        plt.savefig(figures_dir / 'D_box.png', dpi=300, bbox_inches='tight')  # type: ignore
     
     # Plot num_responses/log2 n
     if plot_type == 'error_bars':
         plot_metric_normalized(ax3, df, 'num_responses', lambda n: math.log2(n), 'Normalized \\# POI Responses $R/\\lceil \\log n \\rceil$', algorithms, show_minmax)
-        plt.figure(fig3.number)
-        plt.tight_layout()
-        plt.savefig(figures_dir / 'R.png', dpi=300, bbox_inches='tight')
+        plt.figure(fig3.number)  # type: ignore
+        plt.tight_layout()  # type: ignore
+        plt.savefig(figures_dir / 'R.png', dpi=300, bbox_inches='tight')  # type: ignore
     else:
         plot_box_whisker_normalized(ax3, df, 'num_responses', lambda n: math.log2(n), 'Normalized \\# POI Responses $R/\\lceil \\log n \\rceil$', algorithms)
-        plt.figure(fig3.number)
-        plt.tight_layout()
-        plt.savefig(figures_dir / 'R_box.png', dpi=300, bbox_inches='tight')
+        plt.figure(fig3.number)  # type: ignore
+        plt.tight_layout()  # type: ignore
+        plt.savefig(figures_dir / 'R_box.png', dpi=300, bbox_inches='tight')  # type: ignore
 
-    plt.show()
+    plt.show()  # type: ignore
 
 def plot_box_whisker_normalized(ax: Axes, df: DataFrame, metric: str, normalizer_func: Callable[[float], float], 
                                title: str, algorithms: list[int]):
@@ -110,25 +109,25 @@ def plot_box_whisker_normalized(ax: Axes, df: DataFrame, metric: str, normalizer
     boxplot_data: list[list[float]] = []
     colors: list[str] = []
     
-    for alg in algorithms:
+    for alg in algorithms:  # type: ignore
         # Filter data for this algorithm and metric
         alg_data = df[(df['algorithm'] == alg) & (df['metric'] == metric)]
         
         # Group by n value
-        for n_val in sorted(alg_data['n'].unique()):
-            n_data = alg_data[alg_data['n'] == n_val]
-            if not n_data.empty:
-                row = n_data.iloc[0]
+        for n_val in sorted(alg_data['n'].unique()):  # type: ignore
+            n_data = alg_data[alg_data['n'] == n_val]  # type: ignore
+            if not n_data.empty:  # type: ignore
+                row = n_data.iloc[0]  # type: ignore
                 
                 # Get the normalized quartile values for boxplot
                 norm_factor = normalizer_func(n_val)
-                whisker_min = row['min'] / norm_factor
-                q25 = row['q25'] / norm_factor
-                median = row['median'] / norm_factor
-                q75 = row['q75'] / norm_factor
-                whisker_max = row['max'] / norm_factor
+                whisker_min = row['min'] / norm_factor  # type: ignore
+                q25 = row['q25'] / norm_factor  # type: ignore
+                median = row['median'] / norm_factor  # type: ignore
+                q75 = row['q75'] / norm_factor  # type: ignore
+                whisker_max = row['max'] / norm_factor  # type: ignore
 
-                print(whisker_max)
+                print(whisker_max)  # type: ignore
                 
                 # Store the box plot statistics in the required format
                 # [whisker_min, q25, median, q75, whisker_max]
@@ -145,7 +144,7 @@ def plot_box_whisker_normalized(ax: Axes, df: DataFrame, metric: str, normalizer
     # Create the box and whisker plot
     if boxplot_data:
         # Create custom box plots
-        bplot = ax.boxplot(
+        bplot = ax.boxplot(  # type: ignore
             boxplot_data,
             positions=x_positions,
             widths=0.6, 
@@ -160,14 +159,14 @@ def plot_box_whisker_normalized(ax: Axes, df: DataFrame, metric: str, normalizer
         
         # Apply Okabe-Ito colors to boxes
         for patch, color in zip(bplot['boxes'], colors):
-            patch.set_facecolor(color)
+            patch.set_facecolor(color)  # type: ignore
             patch.set_alpha(0.7)
     
     # Set labels
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(x_labels, rotation=45, ha='right')
-    ax.set_ylabel(title)
-    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_xticks(x_positions)  # type: ignore
+    ax.set_xticklabels(x_labels, rotation=45, ha='right')  # type: ignore
+    ax.set_ylabel(title)  # type: ignore
+    ax.grid(True, linestyle='--', alpha=0.7)  # type: ignore
 
 def plot_metric_normalized(ax: Axes, df: DataFrame, metric: str, normalizer_func: Callable[[float], float], 
                           title: str, algorithms: list[int], show_minmax: bool = True):
@@ -192,16 +191,14 @@ def plot_metric_normalized(ax: Axes, df: DataFrame, metric: str, normalizer_func
         alg_data = df[(df['algorithm'] == alg) & (df['metric'] == metric)]
         
         # Group by n value
-        for n_val in sorted(alg_data['n'].unique()):
-            n_data = alg_data[alg_data['n'] == n_val]
-            if not n_data.empty:
-                row = n_data.iloc[0]
-                
-                # Calculate normalized values
-                normalized_avg: float = row['avg'] / normalizer_func(n_val)
-                normalized_std: float = row['std_dev'] / normalizer_func(n_val)
-                normalized_min: float = row['min'] / normalizer_func(n_val)
-                normalized_max: float = row['max'] / normalizer_func(n_val)
+        for n_val in sorted(alg_data['n'].unique()):  # type: ignore
+            n_data = alg_data[alg_data['n'] == n_val]  # type: ignore
+            if not n_data.empty:  # type: ignore
+                row = n_data.iloc[0]  # type: ignore
+                normalized_avg: float = row['avg'] / normalizer_func(n_val)  # type: ignore
+                normalized_std: float = row['std_dev'] / normalizer_func(n_val)  # type: ignore
+                normalized_min: float = row['min'] / normalizer_func(n_val)  # type: ignore
+                normalized_max: float = row['max'] / normalizer_func(n_val)  # type: ignore
                 
                 # Plot error bar at position
                 x_pos = len(x_positions)
@@ -211,24 +208,24 @@ def plot_metric_normalized(ax: Axes, df: DataFrame, metric: str, normalizer_func
                 color = OKABE_COLORS[(alg - 1) % len(OKABE_COLORS)]
                 
                 # Plot whisker-style error bar with larger marker
-                ax.errorbar(
-                    x_pos, normalized_avg, 
-                    yerr=normalized_std,
-                    fmt='o', capsize=5, 
+                ax.errorbar(  # type: ignore
+                    x_pos, normalized_avg,  # type: ignore
+                    yerr=normalized_std,  # type: ignore
+                    fmt='o', capsize=5,  # type: ignore
                     color=color,
                     markersize=8
                 )
                 
                 # Plot min and max points with larger markers if enabled
                 if show_minmax:
-                    ax.plot(x_pos, normalized_min, 'v', color=color, alpha=0.7, markersize=8)
-                    ax.plot(x_pos, normalized_max, '^', color=color, alpha=0.7, markersize=8)
+                    ax.plot(x_pos, normalized_min, 'v', color=color, alpha=0.7, markersize=8)  # type: ignore
+                    ax.plot(x_pos, normalized_max, '^', color=color, alpha=0.7, markersize=8)  # type: ignore
     
     # Set labels
     ax.set_xticks(x_positions)
     ax.set_xticklabels(x_labels, rotation=45, ha='right')
-    ax.set_ylabel(title)
-    ax.grid(True, linestyle='--', alpha=0.7)
+    ax.set_ylabel(title) # type: ignore
+    ax.grid(True, linestyle='--', alpha=0.7) # type: ignore
 
 if __name__ == "__main__":
     plot_normalized_metrics(plot_type='error_bars', show_minmax=False)

@@ -1,5 +1,18 @@
-from geometry_types import Circle
+"""
+Main simulation module for the drone searching algorithm.
+"""
+from typing import Callable
+import argparse
+import time
+import math
 
+from src.geometry_types import PRECISION, Circle
+from src.geometry_algorithms import covers_unit_circle, add_intelligent_circles, get_intersections
+from src.algorithm_plot import draw_circles
+from src.algorithm_utils import binary_search, get_distance_traveled, place_algorithm_11
+
+
+# Pre-computed algorithm results
 ALGORITHM_1 = [Circle(x=0, y=0, r=0.5), Circle(x=0.75, y=0.43301270189221935, r=0.5), Circle(x=-1.6653345369377348e-16, y=0.8660254037844386, r=0.5), Circle(x=-0.7500000000000001, y=0.4330127018922191, r=0.5), Circle(x=-0.7499999999999998, y=-0.4330127018922196, r=0.5), Circle(x=6.38378239159465e-16, y=-0.8660254037844385, r=0.5), Circle(x=0.7500000000000004, y=-0.4330127018922183, r=0.5)]
 ALGORITHM_2 = [Circle(x=0, y=0, r=0.5), Circle(x=0.5, y=0.5, r=0.7071067811865475), Circle(x=-0.5, y=0.5, r=0.7071067811865475), Circle(x=-0.7499999999999998, y=-0.43301270189221935, r=0.5), Circle(x=6.38378239159465e-16, y=-0.8660254037844385, r=0.5), Circle(x=0.7500000000000004, y=-0.4330127018922183, r=0.5)]
 ALGORITHM_3 = [Circle(x=0.28789865898868494, y=0.4527836361234821, r=0.843860972560833), Circle(x=-0.6618325909742372, y=0.23428465945130714, r=0.712101341011315), Circle(x=-0.36476973938250307, y=-0.7112276461444245, r=0.6009145301876817), Circle(x=0.5569297259284322, y=-0.6577923047806103, r=0.5070883198701132), Circle(x=0.8987720218026585, y=0.09539463542963203, r=0.42791204277983247)]
@@ -10,3 +23,370 @@ ALGORITHM_7 = [Circle(x=0.3766095638275147, y=0.4845356542723805, r=0.7895507812
 ALGORITHM_8 = [Circle(x=-0.4652323341815545, y=0.0, r=0.7606738281250001), Circle(x=0.631835807925796, y=0.1903730016493503, r=0.5786246727943422), Circle(x=0.3697940080061505, y=-0.6721376127407843, r=0.4401446449020478), Circle(x=0.10868020756478226, y=0.809927396170051, r=0.3348065119663595), Circle(x=-0.2268096324157326, y=-0.8507008005358745, r=0.2546785511386293), Circle(x=-0.35105515226951206, y=0.8525717091300288, r=0.19372730843594976), Circle(x=0.8334512813738311, y=-0.45141887403603526, r=0.14736329332032652), Circle(x=0.5066812387531501, y=0.8205098167780042, r=0.11209540045508003), Circle(x=-0.5338611091463583, y=-0.8110230105587689, r=0.0852680373793706), Circle(x=-0.5799133384414544, y=0.7846827534845661, r=0.06486116441007143), Circle(x=0.024957526866519295, y=-0.980222221404978, r=0.049338190228454044), Circle(x=-0.6306083956676077, y=-0.7532837868134962, r=0.03753027003383761), Circle(x=0.9308286536798448, y=-0.3196167621135757, r=0.028548294177204232), Circle(x=-0.6507673738092681, y=0.7465983474462492, r=0.02171594021821259), Circle(x=0.621415822507479, y=0.774187508417866, r=0.01651874737712142), Circle(x=-0.1931950036775884, y=0.9728756836537937, r=0.012565378803184755), Circle(x=-0.6723563363140392, y=-0.7368493091564825, r=0.00955815479605928), Circle(x=-0.6750275665055643, y=0.7343573392884171, r=0.0072706381985297415), Circle(x=0.9514513927696395, y=-0.2968022336890622, r=0.0055305841913874726), Circle(x=-0.18133794081650303, y=0.9813524299000489, r=0.004206970648630317), Circle(x=0.9554387725018909, y=-0.2904077680461287, r=0.0032001324681031375), Circle(x=-0.6814658353052274, y=-0.7300857539758098, r=0.0024342570150191183), Circle(x=-0.682339445375422, y=0.7298309511390368, r=0.0018516756022547286), Circle(x=0.6379088284879326, y=0.7690965724631914, r=0.0014085211688127694), Circle(x=0.07213390677064563, y=-0.9969650230993562, r=0.0010714251894759087), Circle(x=-0.6842523100838022, y=-0.7289071056215444, r=0.000815005100428193), Circle(x=-0.6843349897161745, y=0.7287749660796549, r=0.0006199530496841137), Circle(x=-0.17762853730071212, y=0.9838848899039228, r=0.0004715820595609831), Circle(x=-0.6851032171052384, y=0.7282938748064527, r=0.00035872013052132485), Circle(x=-0.6850662861629557, y=-0.7282949943196, r=0.00027286901490915585), Circle(x=-0.06988362735558888, y=-0.6499857099214075, r=0.00020756431814764528), Circle(x=0.9576159033083701, y=-0.287901726864696, r=0.00015788874446752475), Circle(x=-0.6854133856566726, y=-0.7281474087016567, r=0.00012010183567196199)]
 
 ALGORITHMS: list[list[Circle]] = [[], ALGORITHM_1, ALGORITHM_2, ALGORITHM_3, ALGORITHM_4, ALGORITHM_5, ALGORITHM_6, ALGORITHM_7, ALGORITHM_8]
+
+
+# Type definitions and placement functions
+PkFunction = Callable[[float, int], float]
+CirclePlacerFunction = Callable[[float, PkFunction], list[Circle]]
+
+
+def dummy_placement_algorithm(_p: float, _pk: PkFunction) -> list[Circle]:
+    return []
+
+
+def default_pk(p: float, k: int) -> float:
+    """Default pk function that returns p^k"""
+    return p ** k
+
+
+def find_all_pk(p: float, k: int) -> float:
+    """pk function that returns p^((k + 1) / 2)"""
+    return p ** ((k + 1) / 2)
+
+
+def place_algorithm_4(p: float, pk: PkFunction = default_pk) -> list[Circle]:
+    circles: list[Circle] = []
+
+    current_angle = 0
+    k = 1
+
+    while current_angle < 2 * math.pi:
+        current_radius = pk(p, k)
+        if current_radius < PRECISION.epsilon:
+            return [] # failure
+
+        current_coord = (math.cos(current_angle), 
+                        math.sin(current_angle))
+        current_angle += 2 * math.asin(current_radius)
+        # current_angle = min(current_angle + 2 * asin(current_radius), 2 * pi())
+
+        next_coord = (math.cos(current_angle), 
+                     math.sin(current_angle))
+        
+        new_circle = Circle(
+            (current_coord[0] + next_coord[0]) / 2,
+            (current_coord[1] + next_coord[1]) / 2,
+            current_radius
+        )
+
+        circles.append(new_circle)
+        k += 1
+
+    return circles
+
+
+def place_algorithm_5(p: float, pk: PkFunction = default_pk) -> list[Circle]:
+    chords: list[tuple[float, float]] = []
+
+    current_angle = 0
+    k = 1
+    while current_angle < 2 * math.pi:
+        current_radius = pk(p, k)
+        if current_radius < PRECISION.epsilon:
+            return [] # failure
+
+        chord_angle = 2 * math.asin(current_radius)
+        chords.append((chord_angle, current_radius))
+        current_angle += chord_angle
+
+        k += 1
+
+    CCW: list[tuple[float, float]] = [chords[0]]
+    CW: list[tuple[float, float]] = []
+    CCW_sum = CW_sum = 0
+
+    for chord_angle, radius in chords[:0:-1]:
+        if CCW_sum < CW_sum:
+            CCW.append((chord_angle, radius))
+            CCW_sum += chord_angle
+        else:
+            CW.append((chord_angle, radius))
+            CW_sum += chord_angle
+
+    circles: list[Circle] = []
+
+    current_angle = 0
+    for chord_angle, radius in CCW + CW[::-1]:
+        current_coord = (math.cos(current_angle), 
+                        math.sin(current_angle))
+        current_angle += chord_angle
+
+        next_coord = (math.cos(current_angle), 
+                     math.sin(current_angle))
+
+        new_circle = Circle(
+            (current_coord[0] + next_coord[0]) / 2,
+            (current_coord[1] + next_coord[1]) / 2,
+            radius
+        )
+
+        circles.append(new_circle)
+
+    return sorted(circles, key=lambda c: c.r, reverse=True)
+
+
+def place_algorithm_5_5(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
+    """Central Plus Chords placement algorithm.
+    Places a central circle and places surrounding circles."""
+    circles: list[Circle] = []
+    
+    # Place central circle
+    central_radius = pk(p, 1)
+    circles.append(Circle(0, 0, central_radius))
+    
+    # Place surrounding circles
+    k = 2
+    current_angle = 0
+    while current_angle < 2 * math.pi:
+        current_radius = pk(p, k)
+        if current_radius < PRECISION.epsilon:
+            return [] # failure
+        
+        current_coord = (math.cos(current_angle), math.sin(current_angle))
+        current_angle = min(current_angle + 2 * math.asin(current_radius), 2 * math.pi)
+
+        if final_optimization and current_angle >= 2 * math.pi:
+            current_radius = pk(p, k - 1)
+            points = get_intersections(circles[0], circles[-1])
+            if points:
+                current_coord = max(points, key=lambda p: p[0])
+
+        next_coord = (math.cos(current_angle), math.sin(current_angle))
+        
+        new_circle = Circle(
+            (current_coord[0] + next_coord[0]) / 2,
+            (current_coord[1] + next_coord[1]) / 2,
+            current_radius
+        )
+
+        circles.append(new_circle)
+        k += 1
+    
+    return circles
+
+
+def compute_R_T(R: float, b: float):
+    a = b * R
+    c = 1 - R
+    d = math.sqrt(a * b + c ** 2)
+    q = (b + c + d) / 2
+
+    return b * c * d / (4 * math.sqrt(q * (q - b) * (q - c) * (q - d)))
+
+
+def compute_x2(R: float, r: float):
+    theta = math.asin(r)
+    beta = math.pi / 2 - theta
+    sin_beta = math.sin(beta)
+    c = 1 - R
+    z = c * sin_beta
+    y = math.sqrt(c ** 2 * (1 - sin_beta ** 2))
+
+    return (r - y) ** 2 + z ** 2
+
+
+def place_algorithm_6(p: float, pk: PkFunction = default_pk, final_optimization: bool = True) -> list[Circle]:
+    """Central Plus Optimized Chords placement algorithm.
+    Places a central circle and optimizes the placement of surrounding circles."""
+    circles: list[Circle] = []
+    
+    # Place central circle
+    central_radius = pk(p, 1)
+    circles.append(Circle(0, 0, central_radius))
+    
+    # Place surrounding circles
+    k = 2
+    current_angle = 0
+    while current_angle < 2 * math.pi:
+        current_radius = pk(p, k)
+        if current_radius < PRECISION.epsilon:
+            return circles # failure
+
+        theta = 0
+        points = None
+        
+        if final_optimization and current_angle + 2 * math.asin(current_radius) >= 2 * math.pi:
+            current_radius = pk(p, k - 1)
+            points = get_intersections(circles[1], circles[-1])
+        
+        if points:
+            remaining_angle = math.pi - current_angle / 2
+            next_coord = (math.cos(-remaining_angle), math.sin(-remaining_angle))
+
+            current_coord = max(points, key=lambda p: p[0])
+            new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
+            theta = 2 * math.pi
+        else:
+            R = circles[0].r
+            r = current_radius
+            B = (1 - R) / 2
+            if current_radius ** 2 < compute_x2(circles[0].r, current_radius) and B < current_radius:
+                theta = math.atan(math.sqrt(4 * r ** 2 - (1 - R) ** 2) / (R + 1))
+                distance_from_center = (1 + R) / (2 * math.cos(theta))
+                new_circle_center = (distance_from_center * math.cos(current_angle + theta), distance_from_center * math.sin(current_angle + theta))
+            else:
+                b = 2 * current_radius
+                theta = math.asin(b / 2)
+
+                current_coord = (math.cos(current_angle), math.sin(current_angle))
+                next_coord = (math.cos(current_angle + 2 * theta), math.sin(current_angle + 2 * theta))
+                new_circle_center = ((current_coord[0] + next_coord[0]) / 2, (current_coord[1] + next_coord[1]) / 2)
+
+        current_angle += 2 * theta
+
+        new_circle = Circle(
+            new_circle_center[0],
+            new_circle_center[1],
+            current_radius
+        )
+
+        circles.append(new_circle)
+        k += 1
+    
+    return circles
+
+
+def get_configuration(args: argparse.Namespace) -> tuple[PkFunction, int]:
+    """Get pk function and c_multiplier based on arguments."""
+    if args.find_all:
+        return find_all_pk, 2
+    return default_pk, 1
+
+
+def place_algorithm_10(p: float, pk: PkFunction = default_pk, circle_placement_algorithm: CirclePlacerFunction = dummy_placement_algorithm) -> list[Circle]:
+    """Algorithm 10: Uses a base placement algorithm and then adds intelligent circles."""
+    circles = circle_placement_algorithm(p, pk)
+    return add_intelligent_circles(p, pk, circles)[0]
+
+
+def get_placement_algorithm(algorithm: float) -> CirclePlacerFunction:
+    """Get the appropriate placement algorithm based on argument."""
+    if algorithm == 4:
+        return place_algorithm_4
+    elif algorithm == 5:
+        return place_algorithm_5
+    elif algorithm == 5.5:
+        return lambda p, pk: place_algorithm_5_5(p, pk, final_optimization=False)
+    elif algorithm == 5.75:
+        return place_algorithm_5_5
+    elif algorithm == 6:
+        return lambda p, pk: place_algorithm_6(p, pk, final_optimization=False)
+    elif algorithm == 6.5:
+        return place_algorithm_6
+    elif algorithm == 10:
+        circle_placement_algorithm: CirclePlacerFunction = lambda p, pk: place_algorithm_5(p, pk)[:-1]
+        return lambda p, pk: place_algorithm_10(p, pk, circle_placement_algorithm)
+    elif algorithm == 11:
+        initial_guess_find_one = [Circle(x=-0.4652323341815545, y=0.0, r=0.7606738281250001), Circle(x=0.631835807925796, y=0.1903730016493503, r=0.5786246727943422), Circle(x=0.3697940080061505, y=-0.6721376127407843, r=0.4401446449020478), Circle(x=0.10868020756478226, y=0.809927396170051, r=0.3348065119663595), Circle(x=-0.2268096324157326, y=-0.8507008005358745, r=0.2546785511386293), Circle(x=-0.35105515226951206, y=0.8525717091300288, r=0.19372730843594976)]
+        initial_guess_find_all = [Circle(x=-0.473348414042532, y=0.0, r=0.6600893225800246), Circle(x=0.5343362143380699, y=0.24656189453562138, r=0.5362953873992997), Circle(x=0.30887579035559376, y=-0.6042218420332874, r=0.4357179137841558), Circle(x=-0.02083056251695819, y=0.7816097718162912, r=0.3540028589711956), Circle(x=-0.2825993952802953, y=-0.8047699691777478, r=0.28761274254576497), Circle(x=0.8234521696950104, y=-0.3638099536002596, r=0.2336735073696885)]
+        return lambda p, pk: place_algorithm_11(p, pk, initial_circles=12, initial_guess=initial_guess_find_one if pk == default_pk else initial_guess_find_all)
+    else:
+        raise ValueError("Invalid algorithm selection. Choose 4, 5, 5.5, 5.75, 6, 6.5, 10, or 11.")
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--algorithm', type=float, required=True, choices=[1, 4, 5, 5.5, 5.75, 6, 6.5, 10, 11],
+                       help='4: Progressive Chords, 5: Reordered Chords Placement, 5.5: Central + Chords, 5.75: Central + Chords w/ Final Adjustment, 6: Central + Optimized Chords, 6.5: Central + Optimized Chords w/ Final Adjustment, 10: Reordered Chords + Square Fill')
+    parser.add_argument('--find-all', action='store_true', help='Use p^((k+1)/2) for radius calculation')
+    parser.add_argument('--precision', type=int, default=5, help='Decimal precision for calculations (minimum 1)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug output')
+
+    args = parser.parse_args()
+    
+    # Validate precision after parsing
+    if args.precision < 1:
+        parser.error('Precision must be at least 1')
+        
+    return args
+
+
+def create_evaluator(
+    place_algorithm: Callable[[float, PkFunction], list[Circle]],
+    pk: PkFunction
+) -> Callable[[float], tuple[bool, list[Circle]]]:
+    """Create an evaluation function for binary search."""
+    def evaluate(p: float) -> tuple[bool, list[Circle]]:
+        circles = place_algorithm(p, pk)
+        return covers_unit_circle(circles), circles
+    return evaluate
+
+
+def run_search(evaluator: Callable[[float], tuple[bool, list[Circle]]], debug: bool = False) -> tuple[float, list[Circle]]:
+    """Run binary search with the given evaluator."""
+    return binary_search(0.5, 1, evaluator, debug=debug)
+
+
+def calculate_result(p: float, c_multiplier: int) -> float:
+    """Calculate final result using p and c_multiplier."""
+    return c_multiplier / math.log2(1 / p)
+
+
+def run_simulation(
+    algorithm: float = 4.0,
+    find_all: bool = False,
+    precision: int = 5,
+    debug: bool = False
+) -> tuple[float, float, float, list[Circle], float]:
+    """
+    Run the circle packing simulation with the specified parameters.
+    
+    Args:
+        algorithm (float): Algorithm choice (4, 5, 5.5, 6, or 6.5)
+        find_all (bool): Whether to use p^((k+1)/2) for radius calculation
+        precision (int): Decimal precision for calculations (minimum 1)
+        debug (bool): Enable debug output
+    
+    Returns:
+        tuple[float, float, list[Circle], float]: (p value, c value, list of circles, CPU time)
+    """
+    if precision < 1:
+        raise ValueError('Precision must be at least 1')
+    
+    calc_precision = (precision + 2) * 2
+    PRECISION.set_precision(calc_precision)
+    
+    pk, c_multiplier = get_configuration(argparse.Namespace(find_all=find_all))
+    place_algorithm = get_placement_algorithm(algorithm)
+    evaluator = create_evaluator(place_algorithm, pk)
+    
+    start_time = time.time()
+    p, circles = run_search(evaluator, debug=debug)
+    elapsed_time = time.time() - start_time
+    
+    c = calculate_result(p, c_multiplier)
+    ct = get_distance_traveled(circles, debug=debug)
+    return p, c, ct, circles, elapsed_time
+
+
+def main() -> None:
+    """Main execution function for command-line usage."""
+    args = parse_args()
+    
+    p, c, ct, circles, elapsed_time = run_simulation(
+        algorithm=args.algorithm,
+        find_all=args.find_all,
+        precision=args.precision,
+        debug=args.debug
+    )
+
+    # Format output with requested precision
+    p_str = f"{p:.{args.precision}f}"
+    c_str = f"{c:.{args.precision}f}"
+    ct_str = f"{ct:.{args.precision}f}"
+    print(f"p = {p_str}, c = {c_str}, ct = {ct_str}")
+    print(f"CPU Time: {elapsed_time:.3f} seconds")
+
+    print(circles)
+    
+    draw_circles(circles,
+        title=f"Algorithm {args.algorithm}" + (" (Find All)" if args.find_all else ""),
+        p=p,
+        c=c,
+        ct=ct,
+        cpu_time=elapsed_time)
+
+
+if __name__ == '__main__':
+    main()

@@ -2,11 +2,12 @@
 Geometric algorithms for coverage checking and intersection calculations.
 """
 from collections import deque
-from typing import Generator
+from typing import Generator, Callable
 import math
+import itertools
 import shapely
 
-from geometry_types import Circle, Square, HorizontalLine, UNIT_CIRCLE, PRECISION
+from .geometry_types import Circle, Square, HorizontalLine, UNIT_CIRCLE, PRECISION
 
 
 def get_horizontal_line(circle: Circle, y: float) -> HorizontalLine | None:
@@ -310,3 +311,180 @@ def rotate_circles(circles: list[Circle]):
         rotated_circles.append(Circle(new_x, -new_y, r))
     
     return rotated_circles
+
+
+# Coverage analysis utilities
+
+PkFunction = Callable[[float, int], float]
+
+
+def get_empty_area(circles: list[Circle]) -> float:
+    """Calculate the uncovered area within the unit circle."""
+    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
+    uncovered_polygons = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
+    return uncovered_polygons.area
+
+
+def get_circle_centers(x1: float, y1: float, x2: float, y2: float, r: float):
+    """Get possible circle centers for a circle of radius r passing through two points."""
+    dist = math.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+
+    if dist > 2 * r:
+        return
+    if dist == 0 and r != 0:
+        return
+    if dist == 0 and r == 0:
+        return
+
+    mid_x = (x1 + x2) / 2
+    mid_y = (y1 + y2) / 2
+
+    if dist == 2 * r:
+        yield (mid_x, mid_y)
+        return
+
+    a = (r**2) - (dist/2)**2
+    if a < 0:
+      # Numerical instability could cause slight negative due to floating point errors.
+      # Should happen when dist is very close to 2 * r. Just treat it as zero.
+      a = 0
+
+    a = math.sqrt(a)
+
+    # Calculate the coordinates of the intersection points.
+    dx = x2 - x1
+    dy = y2 - y1
+
+    x3 = mid_x + (a * dy / dist)
+    y3 = mid_y - (a * dx / dist)
+    x4 = mid_x - (a * dy / dist)
+    y4 = mid_y + (a * dx / dist)
+
+    yield (x3, y3)
+    yield (x4, y4)
+
+
+def intelligently_minimize(largest_geom: shapely.geometry.base.BaseGeometry, r: float) -> Circle:
+    """Find optimal circle placement to minimize uncovered area."""
+    convex_hull = largest_geom.convex_hull
+
+    # Get vertices of convex hull
+    all_vertices: list[tuple[float, float]] = list(convex_hull.exterior.coords)[:-1] # type: ignore
+
+    vertices: list[tuple[float, float]] = []
+    for i in range(len(all_vertices)):
+        x1, y1 = all_vertices[i]
+        x2, y2 = all_vertices[(i + 1) % len(all_vertices)]
+        x3, y3 = all_vertices[(i + 2) % len(all_vertices)]
+
+        dx1 = x2 - x1
+        dy1 = y2 - y1
+        dx2 = x3 - x2
+        dy2 = y3 - y2
+
+        dot = dx1 * dx2 + dy1 * dy2
+        det = dx1 * dy2 - dy1 * dx2
+        angle = math.atan2(det, dot)
+
+        if max(abs(angle), math.pi - abs(angle)) <= math.pi * 0.9:
+            vertices.append((x2, y2))
+
+    if len(vertices) > 10:
+        return Circle(largest_geom.centroid.x, largest_geom.centroid.y, r)
+
+    max_area = 0
+    max_circle = None
+    for (x1, y1), (x2, y2) in itertools.combinations(vertices, 2):
+        for (x0, y0) in get_circle_centers(x1, y1, x2, y2, r):
+            circle = Circle(x0, y0, r)
+            circle_polygon = PRECISION.get_circle_polygon(circle)
+
+            # Calculate area of the intersection
+            intersection = largest_geom.intersection(circle_polygon)
+            if intersection.area > max_area:
+                max_area = intersection.area
+                max_circle = circle
+        
+    return max_circle if max_circle else Circle(largest_geom.centroid.x, largest_geom.centroid.y, r)
+
+
+def add_centroid_circles(p: float, pk: PkFunction, circles: list[Circle]) -> tuple[list[Circle], float]:
+    """Add circles at centroids of uncovered regions."""
+    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
+    uncovered_polygons = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
+
+    k = len(circles) + 1
+
+    while True:
+        current_radius = pk(p, k)
+
+        if current_radius < PRECISION.epsilon:
+            break
+
+        if uncovered_polygons.area < PRECISION.epsilon ** 2:
+            biggest_uncovered_square = get_biggest_uncovered_square(circles)
+            if biggest_uncovered_square is None:
+                biggest_uncovered_square = get_biggest_semicovered_square(circles)
+                if biggest_uncovered_square is None:
+                    return circles, 0
+            
+            new_circle = Circle(
+                biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
+                biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
+                current_radius
+            )
+            
+            circles.append(new_circle)
+            k += 1
+            continue
+        
+        largest_geom = max(uncovered_polygons.geoms, key=lambda g: g.area) if hasattr(uncovered_polygons, 'geoms') else uncovered_polygons # type: ignore
+        centroid = largest_geom.centroid # type: ignore
+        new_circle = Circle(centroid.x, centroid.y, current_radius) # type: ignore
+        circles.append(new_circle)
+        k += 1
+
+        uncovered_polygons = uncovered_polygons.difference(PRECISION.get_circle_polygon(new_circle)) # type: ignore
+
+    return circles, uncovered_polygons.area
+
+
+def add_intelligent_circles(p: float, pk: PkFunction, circles: list[Circle]) -> tuple[list[Circle], float]:
+    """Add circles using intelligent placement to minimize uncovered area."""
+    circle_polygons = [PRECISION.get_circle_polygon(circle) for circle in circles]
+    uncovered_polygons = PRECISION.unit_circle_polygon.difference(shapely.union_all(circle_polygons)) # type: ignore
+
+    k = len(circles) + 1
+
+    while True:
+        current_radius = pk(p, k)
+
+        if current_radius < PRECISION.epsilon:
+            break
+
+        if uncovered_polygons.area < PRECISION.epsilon ** 2:
+            biggest_uncovered_square = get_biggest_uncovered_square(circles)
+            if biggest_uncovered_square is None:
+                biggest_uncovered_square = get_biggest_semicovered_square(circles)
+                if biggest_uncovered_square is None:
+                    return circles, 0
+            
+            new_circle = Circle(
+                biggest_uncovered_square.x + biggest_uncovered_square.side_length / 2,
+                biggest_uncovered_square.y + biggest_uncovered_square.side_length / 2,
+                current_radius
+            )
+            
+            circles.append(new_circle)
+            k += 1
+            continue
+        
+        largest_geom = max(uncovered_polygons.geoms, key=lambda g: g.area) if hasattr(uncovered_polygons, 'geoms') else uncovered_polygons # type: ignore
+        
+        new_circle: Circle = intelligently_minimize(largest_geom, current_radius) # type: ignore
+        circles.append(new_circle)
+        k += 1
+
+        uncovered_polygons = uncovered_polygons.difference(PRECISION.get_circle_polygon(new_circle)) # type: ignore
+
+    return circles, uncovered_polygons.area
